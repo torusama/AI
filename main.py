@@ -16,6 +16,8 @@ import os
 from core.grid import Grid
 from Algorithm.bfs import bfs_steps
 from Algorithm.dfs import dfs_steps
+from Algorithm.UCS import ucs_steps
+from Algorithm.ASTAR import astar_steps
 from Algorithm.bidirectional import bidirectional_steps
 from Algorithm.idastar import ida_star_steps
 from gui.renderer import Renderer, CELL_SIZE, MARGIN
@@ -35,6 +37,8 @@ FPS      = 60
 ALGORITHMS = {
     'BFS': bfs_steps,
     'DFS': dfs_steps,
+    'UCS': ucs_steps,
+    'A*': astar_steps,
     'Bidirectional Search': bidirectional_steps,
     'IDA*': ida_star_steps,
 }
@@ -81,16 +85,25 @@ def main():
 
     def start_animation():
         nonlocal stepper, current_step, animating, paused, last_step_ms
-        algo_fn      = ALGORITHMS[ALGO_KEYS[algo_idx]]
-        stepper      = algo_fn(grid)
+        algo_name = ALGO_KEYS[algo_idx]
+        algo_fn = ALGORITHMS[algo_name]
+
+        if algo_name == 'A*':
+            stepper = algo_fn(grid, panel.selected_heuristic)
+        else:
+            stepper = algo_fn(grid)
+
         current_step = next(stepper, None)
-        animating    = True
-        paused       = False
+        animating = True
+        paused = False
         last_step_ms = pygame.time.get_ticks()
 
     def update_caption():
+        extra = ''
+        if ALGO_KEYS[algo_idx] == 'A*':
+            extra = f' - {panel.selected_heuristic}'
         pygame.display.set_caption(
-            f'Pacman AI — {ALGO_KEYS[algo_idx]}  (Tab để đổi thuật toán)'
+            f'Pacman AI — {ALGO_KEYS[algo_idx]}{extra}  (Tab để đổi thuật toán)'
         )
 
     update_caption()
@@ -102,6 +115,7 @@ def main():
         mouse_pos = pygame.mouse.get_pos()
 
         for event in pygame.event.get():
+
             if event.type == pygame.QUIT:
                 running = False
 
@@ -114,6 +128,10 @@ def main():
                 renderer = Renderer(grid, offset_x=0, offset_y=0)
                 panel.reposition(grid_pixel_w)
                 print(f'[Map] Đã load: {panel.selected_map_path}')
+
+            if panel.handle_heuristic_click(event):
+                reset()
+                update_caption()
 
             # ── Nút Run: bắt đầu hoặc resume ─────────────────────────────
             if panel.btn_run.is_clicked(event):

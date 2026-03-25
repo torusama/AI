@@ -11,10 +11,10 @@ from gui.colors import (
 )
 
 SPEED_LEVELS = [
-    ('Chậm',      60),
-    ('Bình thường', 30),
+    ('Cham',      60),
+    ('Binh thuong', 30),
     ('Nhanh',     10),
-    ('Rất nhanh',  2),
+    ('Rat nhanh',  2),
 ]
 
 
@@ -85,6 +85,8 @@ class Panel:
             })
 
         self.selected_map_idx = 0
+        self.heuristic_options = ['manhattan', 'euclidean']
+        self.selected_heuristic_idx = 0
 
         # ── Nút Run, Pause, Reset, Speed ──────────────────────────────────
         btn_y  = map_start_y + len(self.MAP_LIST) * (map_btn_h + 4) + 12
@@ -97,10 +99,17 @@ class Panel:
 
         self.btn_reset = Button(pygame.Rect(x + 10, btn_y + btn_h + 6, btn_w, btn_h), 'Reset')
         self.btn_speed = Button(pygame.Rect(x + 10, btn_y + (btn_h + 6) * 2, btn_w, btn_h), f'Speed: {SPEED_LEVELS[1][0]}')
+        heu_y = btn_y + (btn_h + 6) * 3 + 10
+        self.btn_manhattan = Button(
+            pygame.Rect(x + 10, heu_y, btn_w, 28), 'A*: Manhattan'
+        )
+        self.btn_euclidean = Button(
+            pygame.Rect(x + 10, heu_y + 34, btn_w, 28), 'A*: Euclidean'
+        )
+
+        self._below_btns_y = heu_y + 34 + 28 + 12
 
         self.speed_idx = 1  # mặc định: Bình thường (30ms)
-
-        self._below_btns_y = btn_y + (btn_h + 6) * 3 + 8
 
         # Stats
         self.stats = {
@@ -146,6 +155,8 @@ class Panel:
         self.btn_pause.update(mouse_pos)
         self.btn_reset.update(mouse_pos)
         self.btn_speed.update(mouse_pos)
+        self.btn_manhattan.update(mouse_pos)
+        self.btn_euclidean.update(mouse_pos)
         for btn in self.map_buttons:
             btn['hovered'] = btn['rect'].collidepoint(mouse_pos)
 
@@ -189,6 +200,17 @@ class Panel:
         self.btn_speed.rect.x = offset
         self.btn_speed.rect.y = btn_y + (btn_h + 6) * 2
 
+        heu_y = btn_y + (btn_h + 6) * 3 + 10
+        self.btn_manhattan.rect.x = offset
+        self.btn_manhattan.rect.y = heu_y
+        self.btn_manhattan.rect.w = self.width - 20
+
+        self.btn_euclidean.rect.x = offset
+        self.btn_euclidean.rect.y = heu_y + 34
+        self.btn_euclidean.rect.w = self.width - 20
+
+        self._below_btns_y = heu_y + 34 + 28 + 12
+
         self._below_btns_y = btn_y + (btn_h + 6) * 3 + 8
 
     # ── Vẽ ─────────────────────────────────────────────────────────────────
@@ -214,6 +236,15 @@ class Panel:
         # Speed: màu theo tốc độ
         speed_colors = [(100,100,180), (70,130,180), (60,170,100), (200,80,80)]
         self.btn_speed.draw(surface, color_override=speed_colors[self.speed_idx])
+
+        heu_title = self.font_title.render('A* Heuristic', True, TEXT_COLOR)
+        surface.blit(heu_title, (self.x + 10, self.btn_manhattan.rect.y - 20))
+
+        manhattan_color = (40, 120, 200) if self.selected_heuristic == 'manhattan' else None
+        euclidean_color = (40, 120, 200) if self.selected_heuristic == 'euclidean' else None
+
+        self.btn_manhattan.draw(surface, color_override=manhattan_color)
+        self.btn_euclidean.draw(surface, color_override=euclidean_color)
 
         self._draw_stats(surface)
         self._draw_legend(surface)
@@ -274,3 +305,16 @@ class Panel:
             label = self.font_small.render(label_text, True, TEXT_COLOR)
             surface.blit(label, (self.x + 28, y_cur))
             y_cur += 18
+
+    @property
+    def selected_heuristic(self) -> str:
+        return self.heuristic_options[self.selected_heuristic_idx]
+    
+    def handle_heuristic_click(self, event) -> bool:
+        if self.btn_manhattan.is_clicked(event):
+            self.selected_heuristic_idx = 0
+            return True
+        if self.btn_euclidean.is_clicked(event):
+            self.selected_heuristic_idx = 1
+            return True
+        return False
