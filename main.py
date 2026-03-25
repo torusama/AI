@@ -16,6 +16,8 @@ import os
 from core.grid import Grid
 from Algorithm.bfs import bfs_steps
 from Algorithm.dfs import dfs_steps
+from Algorithm.bidirectional import bidirectional_steps
+from Algorithm.idastar import ida_star_steps
 from gui.renderer import Renderer, CELL_SIZE, MARGIN
 from gui.panel import Panel
 from gui.colors import BACKGROUND
@@ -33,6 +35,8 @@ FPS      = 60
 ALGORITHMS = {
     'BFS': bfs_steps,
     'DFS': dfs_steps,
+    'Bidirectional Search': bidirectional_steps,
+    'IDA*': ida_star_steps,
 }
 ALGO_KEYS = list(ALGORITHMS.keys())
 
