@@ -15,9 +15,10 @@ CELL_COLORS = {
 }
 
 # ── Màu trạng thái thuật toán ─────────────────────────────────────────────
-EXPLORED_COLOR  = (180, 210, 255)   # Node đã khám phá — xanh nhạt
-FRONTIER_COLOR  = (255, 230, 100)   # Frontier          — vàng
-PATH_COLOR      = (255,  80,  80)   # Đường đi cuối     — đỏ tươi
+EXPLORED_COLOR  = (180, 210, 255)   # Node đã khám phá — xanh nhạt (fallback)
+FRONTIER_COLOR  = (255, 230, 100)   # Frontier          — vàng (fallback)
+PATH_COLOR      = (220,  40,  40)   # Đường đúng        — ĐỎ ĐẬM
+PATH_WRONG_COLOR = (220, 160, 160)  # Nhánh sai         — ĐỎ NHẠT
 
 # ── Màu khác ──────────────────────────────────────────────────────────────
 BACKGROUND      = (30,  30,  30)    # Nền app
@@ -28,3 +29,16 @@ PANEL_BG        = (45,  45,  45)    # Nền panel bên phải
 BUTTON_COLOR    = (70,  130, 180)   # Nút bấm — xanh dương
 BUTTON_HOVER    = (100, 160, 210)   # Nút hover
 BUTTON_TEXT     = (255, 255, 255)   # Chữ trên nút
+
+# ── Màu nhánh BFS (dùng khi đang animate, trước khi biết đường đúng) ──────
+# Mỗi branch_id % len(BRANCH_COLORS) -> màu riêng
+BRANCH_COLORS = [
+    (120, 180, 255),  # xanh dương nhạt
+    (255, 200, 100),  # vàng
+    (150, 220, 150),  # xanh lá nhạt
+    (220, 150, 255),  # tím nhạt
+    (255, 180, 140),  # cam nhạt
+    (140, 230, 220),  # teal nhạt
+    (255, 160, 200),  # hồng nhạt
+    (200, 200, 140),  # vàng xanh nhạt
+]
