@@ -51,6 +51,9 @@ class Panel:
         ('Open',      'maps/Open.txt'),
         ('Cost Trap', 'maps/Cost_trap.txt'),
         ('Dead End',  'maps/Dead_end.txt'),
+        ('Map 4 - Dead-End Maze', 'maps/Map4_Dead_End_Maze.txt'),
+        ('Map 5 - Symmetric', 'maps/Map5_Symmetric.txt'),
+        ('Map 6 - Realistic Mixed', 'maps/Map6_Realistic_Mixed.txt'),
     ]
 
     def __init__(self, x: int, y: int, width: int, height: int, base_dir: str = ''):
