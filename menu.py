@@ -69,11 +69,15 @@ ALGORITHMS = {
 }
 
 ALGO_ORDER = list(ALGORITHMS.keys())
+HEURISTIC_ROW_ALGOS = {'A*', 'IDA*', 'Beam Search'}
+HEURISTIC_ORDER = ['manhattan', 'euclidean']
 
 
-def _empty_algo_result(algo_name: str) -> dict:
+def _empty_algo_result(algo_name: str, heuristic: str = '_') -> dict:
     return {
+        'row_key': f'{algo_name}::{heuristic}',
         'algorithm': algo_name,
+        'heuristic': heuristic,
         'cost': '_',
         'path_length': '_',
         'nodes_found': '_',
@@ -83,30 +87,58 @@ def _empty_algo_result(algo_name: str) -> dict:
 
 
 def _empty_map_results() -> dict:
-    return {algo: _empty_algo_result(algo) for algo in ALGO_ORDER}
+    rows = {}
+    for algo in ALGO_ORDER:
+        if algo in HEURISTIC_ROW_ALGOS:
+            rows[f'{algo}::_'] = _empty_algo_result(algo, '_')
+        else:
+            rows[f'{algo}::none'] = _empty_algo_result(algo, '_')
+    return rows
 
 
-def _get_map_results(map_results: dict, map_path: str) -> dict:
+def _get_map_results_rows(map_results: dict, map_path: str) -> list:
     merged = _empty_map_results()
     existing = map_results.get(map_path, {})
-    for algo, row in existing.items():
-        if algo in merged:
-            merged[algo].update(row)
-    return merged
+    for row_key, row in existing.items():
+        merged[row_key] = dict(row)
+
+    ordered_rows = []
+    for algo in ALGO_ORDER:
+        if algo in HEURISTIC_ROW_ALGOS:
+            algo_rows = []
+            for h in HEURISTIC_ORDER:
+                key = f'{algo}::{h}'
+                if key in merged:
+                    algo_rows.append(merged[key])
+            if algo_rows:
+                ordered_rows.extend(algo_rows)
+            else:
+                ordered_rows.append(merged[f'{algo}::_'])
+        else:
+            ordered_rows.append(merged[f'{algo}::none'])
+    return ordered_rows
 
 
 def _update_map_results(map_results: dict, map_path: str, algorithm: str,
                         cost, path_length: int, nodes_found: int, time_ms: float,
-                        selected_speed: str):
+                        selected_speed: str, selected_heuristic: str):
     if map_path not in map_results:
         map_results[map_path] = _empty_map_results()
 
     time_ms = max(0.0, float(time_ms or 0.0))
     nodes_found = int(nodes_found or 0)
     speed = str(selected_speed) if selected_speed else '_'
+    heuristic = selected_heuristic if algorithm in HEURISTIC_ROW_ALGOS else '_'
+    row_key = f'{algorithm}::{heuristic}' if algorithm in HEURISTIC_ROW_ALGOS else f'{algorithm}::none'
 
-    map_results[map_path][algorithm] = {
+    # Remove placeholder row when first heuristic-specific result is created.
+    if algorithm in HEURISTIC_ROW_ALGOS:
+        map_results[map_path].pop(f'{algorithm}::_', None)
+
+    map_results[map_path][row_key] = {
+        'row_key': row_key,
         'algorithm': algorithm,
+        'heuristic': heuristic,
         'cost': str(cost),
         'path_length': str(path_length),
         'nodes_found': str(nodes_found),
@@ -354,7 +386,7 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
 
         map_name, rel_map = MAP_LIST[stats_map_idx]
         abs_map = os.path.join(base_dir, rel_map)
-        rows_by_algo = _get_map_results(map_results, abs_map)
+        table_rows = _get_map_results_rows(map_results, abs_map)
 
         title = font_title.render(f'STATS - {map_name}', True, (255, 255, 255))
         screen.blit(title, (box_x + 24, box_y + 16))
@@ -371,53 +403,56 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
         table_x = box_x + 20
         table_y = box_y + 82
         table_w = box_w - 40
-        row_h = 40
+        row_h = 34
 
-        metrics = [
-            ('cost', 'Cost'),
-            ('path_length', 'Path Length'),
-            ('nodes_found', 'Nodes Found'),
-            ('speed', 'Speed'),
-            ('time', 'Time'),
+        cols = [
+            ('algorithm', 'Algorithm', 0.22),
+            ('heuristic', 'Heuristic', 0.14),
+            ('cost', 'Cost', 0.09),
+            ('path_length', 'Path', 0.10),
+            ('nodes_found', 'Nodes', 0.14),
+            ('speed', 'Speed', 0.13),
+            ('time', 'Time', 0.18),
         ]
 
-        metric_col_w = 170
-        algo_col_w = (table_w - metric_col_w) // len(ALGO_ORDER)
-        col_edges = [table_x, table_x + metric_col_w]
-        for _ in range(len(ALGO_ORDER) - 1):
-            col_edges.append(col_edges[-1] + algo_col_w)
-        col_edges.append(table_x + table_w)
+        edges = [table_x]
+        acc = table_x
+        for _, _, ratio in cols[:-1]:
+            acc += int(table_w * ratio)
+            edges.append(acc)
+        edges.append(table_x + table_w)
 
-        # Header row
+        # Header row: columns are properties
         header_rect = pygame.Rect(table_x, table_y, table_w, row_h)
         pygame.draw.rect(screen, (0, 95, 160), header_rect)
         pygame.draw.rect(screen, (255, 255, 255), header_rect, 1)
 
-        txt_metric = font_header.render('Metric', True, (230, 247, 255))
-        screen.blit(txt_metric, (col_edges[0] + 8, table_y + (row_h - txt_metric.get_height()) // 2))
+        for idx, (_, label, _) in enumerate(cols):
+            x1 = edges[idx]
+            x2 = edges[idx + 1]
+            txt = font_header_algo.render(label, True, (230, 247, 255))
+            if idx <= 1:
+                screen.blit(txt, (x1 + 6, table_y + (row_h - txt.get_height()) // 2))
+            else:
+                screen.blit(txt, txt.get_rect(center=((x1 + x2) // 2, table_y + row_h // 2)))
 
-        for idx, algo_name in enumerate(ALGO_ORDER):
-            x1 = col_edges[idx + 1]
-            x2 = col_edges[idx + 2]
-            txt = font_header_algo.render(algo_name, True, (230, 247, 255))
-            screen.blit(txt, txt.get_rect(center=((x1 + x2) // 2, table_y + row_h // 2)))
-
-        # Body
+        # Body rows: each row is one algorithm variant (algo + heuristic)
         y = table_y + row_h
-        for row_idx, (metric_key, metric_label) in enumerate(metrics):
+        max_rows = max(1, (box.bottom - 56 - y) // row_h)
+        for row_idx, row_data in enumerate(table_rows[:max_rows]):
             row_rect = pygame.Rect(table_x, y, table_w, row_h)
             pygame.draw.rect(screen, (0, 126, 198) if row_idx % 2 == 0 else (0, 118, 190), row_rect)
             pygame.draw.rect(screen, (255, 255, 255), row_rect, 1)
 
-            txt_row = font_header.render(metric_label, True, (240, 252, 255))
-            screen.blit(txt_row, (col_edges[0] + 8, y + (row_h - txt_row.get_height()) // 2))
-
-            for col_idx, algo_name in enumerate(ALGO_ORDER):
-                x1 = col_edges[col_idx + 1]
-                x2 = col_edges[col_idx + 2]
-                val = str(rows_by_algo.get(algo_name, _empty_algo_result(algo_name)).get(metric_key, '_'))
-                txt_val = font_body.render(val, True, (255, 255, 255))
-                screen.blit(txt_val, txt_val.get_rect(center=((x1 + x2) // 2, y + row_h // 2)))
+            for idx, (key, _, _) in enumerate(cols):
+                x1 = edges[idx]
+                x2 = edges[idx + 1]
+                val = str(row_data.get(key, '_'))
+                txt = font_body.render(val, True, (255, 255, 255))
+                if idx <= 1:
+                    screen.blit(txt, (x1 + 6, y + (row_h - txt.get_height()) // 2))
+                else:
+                    screen.blit(txt, txt.get_rect(center=((x1 + x2) // 2, y + row_h // 2)))
 
             y += row_h
 
@@ -640,6 +675,7 @@ def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
                             nodes_found=len(current_step.get('explored', set())),
                             time_ms=current_step.get('time_ms', 0),
                             selected_speed=run_speed_label,
+                            selected_heuristic=panel.selected_heuristic,
                         )
                         if found and saved_path:
                             phase      = 'walking'
