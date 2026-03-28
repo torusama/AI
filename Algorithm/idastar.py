@@ -17,10 +17,13 @@ def _compute_path_cost(grid: Grid, path):
     return sum(grid.get_cost(r, c) for r, c in path[1:])
 
 
+import time
+
 def _ida_star_run(grid: Grid, capture_steps: bool, heuristic_name: str = 'manhattan'):
     start = grid.start
     goal = grid.goal
 
+    # Trường hợp cơ bản: start hoặc goal không tồn tại
     if not start or not goal:
         return {
             "path": [], "explored": set(), "cost": 0,
@@ -28,10 +31,15 @@ def _ida_star_run(grid: Grid, capture_steps: bool, heuristic_name: str = 'manhat
         }
 
     t0 = time.time()
+    # Ngưỡng bắt đầu bằng heuristic từ điểm xuất phát
     threshold = heuristic_to_goal(start, goal, heuristic_name)
-
+    
     explored_overall = set()
     snapshots = []
+    
+    # Transposition Table để tránh bùng nổ trạng thái trên đồ thị lưới
+    # Lưu cấu trúc: { (row, col): min_g_cost }
+    transposition_table = {}
 
     def save_snapshot(path):
         if not capture_steps:
@@ -52,8 +60,15 @@ def _ida_star_run(grid: Grid, capture_steps: bool, heuristic_name: str = 'manhat
         h_cost = heuristic_to_goal(node, goal, heuristic_name)
         f_cost = g_cost + h_cost
 
+        # Nếu f(n) vượt ngưỡng, trả về f(n) để làm ngưỡng mới cho lần lặp sau
         if f_cost > bound:
             return f_cost, None
+
+        # TỐI ƯU: Kiểm tra Transposition Table
+        # Nếu đã từng đến ô này với chi phí g_cost nhỏ hơn hoặc bằng, bỏ qua nhánh này
+        if node in transposition_table and transposition_table[node] <= g_cost:
+            return float("inf"), None
+        transposition_table[node] = g_cost
 
         explored_overall.add(node)
         save_snapshot(path)
@@ -62,28 +77,41 @@ def _ida_star_run(grid: Grid, capture_steps: bool, heuristic_name: str = 'manhat
             return "FOUND", list(path)
 
         min_exceeded = float("inf")
-
         row, col = node
-        neighbors = sorted(
-            grid.get_neighbors(row, col),
-            key=lambda item: heuristic_to_goal(item[0].position, goal, heuristic_name)
-        )
-
-        for neighbor, _ in neighbors:
+        
+        # Lấy danh sách láng giềng và sắp xếp theo f_cost dự kiến (g + h)
+        # Điều này giúp tìm ra mục tiêu nhanh hơn trong mỗi threshold
+        neighbors = []
+        for neighbor, move_cost in grid.get_neighbors(row, col):
             npos = neighbor.position
+            # g_cost mới = g hiện tại + cost để bước vào ô đó
+            n_g = g_cost + neighbor.cost
+            n_h = heuristic_to_goal(npos, goal, heuristic_name)
+            neighbors.append((neighbor, n_g, n_g + n_h))
+            
+        # Sắp xếp theo f_cost (phần tử thứ 3 trong tuple)
+        neighbors.sort(key=lambda x: x[2])
+
+        for neighbor, n_g, _ in neighbors:
+            npos = neighbor.position
+            
+            # Tránh chu trình trong nhánh hiện tại
             if npos in path_set:
                 continue
 
             path.append(npos)
             path_set.add(npos)
 
-            result, found_path = search(path, path_set, g_cost + neighbor.cost, bound)
+            result, found_path = search(path, path_set, n_g, bound)
+            
             if result == "FOUND":
                 return "FOUND", found_path
 
+            # Cập nhật ngưỡng tối thiểu vượt rào để dùng cho lần lặp sau
             if result < min_exceeded:
                 min_exceeded = result
 
+            # Quay lui (Backtracking)
             path.pop()
             path_set.remove(npos)
 
@@ -92,7 +120,10 @@ def _ida_star_run(grid: Grid, capture_steps: bool, heuristic_name: str = 'manhat
     final_path = []
     found = False
 
+    # Vòng lặp Iterative Deepening
     while True:
+        # Reset Transposition Table cho mỗi lần tăng threshold
+        transposition_table = {}
         path = [start]
         path_set = {start}
 
@@ -103,9 +134,11 @@ def _ida_star_run(grid: Grid, capture_steps: bool, heuristic_name: str = 'manhat
             found = True
             break
 
+        # Nếu kết quả là vô cùng, nghĩa là đã duyệt hết đồ thị mà không thấy goal
         if result == float("inf"):
             break
 
+        # Tăng ngưỡng lên giá trị f_cost nhỏ nhất đã từng vượt ngưỡng cũ
         threshold = result
 
     time_ms = (time.time() - t0) * 1000
