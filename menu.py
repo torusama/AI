@@ -25,6 +25,8 @@ from Algorithm.bfs import bfs_steps
 from Algorithm.dfs import dfs_steps
 from Algorithm.UCS import ucs_steps
 from Algorithm.ASTAR import astar_steps
+from Algorithm.greedy import greedy_steps
+from Algorithm.beamsearch import beam_search_steps
 from Algorithm.bidirectional import bidirectional_steps
 from Algorithm.idastar import ida_star_steps
 from gui.renderer import Renderer, CELL_SIZE, MARGIN
@@ -60,6 +62,8 @@ ALGORITHMS = {
     'DFS':                  dfs_steps,
     'UCS':                  ucs_steps,
     'A*':                   astar_steps,
+    'Greedy Search':        greedy_steps,
+    'Beam Search':          beam_search_steps,
     'Bidirectional Search': bidirectional_steps,
     'IDA*':                 ida_star_steps,
 }
@@ -357,8 +361,12 @@ def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
         nonlocal stepper, current_step, animating, paused, last_step_ms, phase
         algo_name    = panel.selected_algo
         algo_fn      = ALGORITHMS[algo_name]
-        stepper      = algo_fn(grid, panel.selected_heuristic) \
-                       if algo_name in ('A*', 'IDA*') else algo_fn(grid)
+        if algo_name == 'Beam Search':
+            stepper = algo_fn(grid, panel.selected_heuristic, panel.selected_beam_width)
+        elif algo_name in ('A*', 'IDA*', 'Greedy Search'):
+            stepper = algo_fn(grid, panel.selected_heuristic)
+        else:
+            stepper = algo_fn(grid)
         current_step = next(stepper, None)
         animating    = True
         paused       = False
@@ -378,6 +386,8 @@ def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
             if panel.handle_keydown(event):
                 reset()
             if panel.handle_heuristic_click(event):
+                reset()
+            if panel.handle_beam_width_click(event):
                 reset()
             panel.handle_speed_click(event)
 
