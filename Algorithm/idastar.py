@@ -1,6 +1,7 @@
 """
 Iterative Deepening A* (IDA*)
-- Dùng ngưỡng f = g + h (h là Manhattan distance).
+- Dùng ngưỡng f = g + h.
+- Hỗ trợ 2 heuristic: Manhattan và Euclidean.
 - Kết hợp ưu điểm DFS (ít bộ nhớ) với heuristic của A*.
 """
 
@@ -9,7 +10,14 @@ from core.grid import Grid
 from core.heuristic import heuristic_to_goal
 
 
-def _ida_star_run(grid: Grid, capture_steps: bool):
+def _compute_path_cost(grid: Grid, path):
+    if not path:
+        return 0
+    # Path cost is the sum of costs of entered cells (excluding start).
+    return sum(grid.get_cost(r, c) for r, c in path[1:])
+
+
+def _ida_star_run(grid: Grid, capture_steps: bool, heuristic_name: str = 'manhattan'):
     start = grid.start
     goal = grid.goal
 
@@ -20,7 +28,7 @@ def _ida_star_run(grid: Grid, capture_steps: bool):
         }
 
     t0 = time.time()
-    threshold = heuristic_to_goal(start, goal)
+    threshold = heuristic_to_goal(start, goal, heuristic_name)
 
     explored_overall = set()
     snapshots = []
@@ -41,7 +49,7 @@ def _ida_star_run(grid: Grid, capture_steps: bool):
 
     def search(path, path_set, g_cost, bound):
         node = path[-1]
-        h_cost = heuristic_to_goal(node, goal)
+        h_cost = heuristic_to_goal(node, goal, heuristic_name)
         f_cost = g_cost + h_cost
 
         if f_cost > bound:
@@ -58,7 +66,7 @@ def _ida_star_run(grid: Grid, capture_steps: bool):
         row, col = node
         neighbors = sorted(
             grid.get_neighbors(row, col),
-            key=lambda item: heuristic_to_goal(item[0].position, goal)
+            key=lambda item: heuristic_to_goal(item[0].position, goal, heuristic_name)
         )
 
         for neighbor, _ in neighbors:
@@ -101,19 +109,20 @@ def _ida_star_run(grid: Grid, capture_steps: bool):
         threshold = result
 
     time_ms = (time.time() - t0) * 1000
+    final_cost = _compute_path_cost(grid, final_path) if found else 0
 
     return {
         "path": final_path,
         "explored": explored_overall,
-        "cost": len(final_path) - 1 if found else 0,
+        "cost": final_cost,
         "time_ms": time_ms,
         "found": found,
         "snapshots": snapshots,
     }
 
 
-def ida_star(grid: Grid):
-    result = _ida_star_run(grid, capture_steps=False)
+def ida_star(grid: Grid, heuristic_name: str = 'manhattan'):
+    result = _ida_star_run(grid, capture_steps=False, heuristic_name=heuristic_name)
     return {
         "path": result["path"],
         "explored": result["explored"],
@@ -122,7 +131,7 @@ def ida_star(grid: Grid):
     }
 
 
-def ida_star_steps(grid: Grid):
+def ida_star_steps(grid: Grid, heuristic_name: str = 'manhattan'):
     """Generator step-by-step cho animation."""
     start = grid.start
     goal = grid.goal
@@ -147,7 +156,7 @@ def ida_star_steps(grid: Grid):
         "time_ms": (time.time() - t0) * 1000,
     }
 
-    result = _ida_star_run(grid, capture_steps=True)
+    result = _ida_star_run(grid, capture_steps=True, heuristic_name=heuristic_name)
 
     for snap in result["snapshots"]:
         yield snap
