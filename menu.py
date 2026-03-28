@@ -316,6 +316,7 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
     rect_prev = pygame.Rect(0, 0, 0, 0)
     rect_next = pygame.Rect(0, 0, 0, 0)
     rect_close = pygame.Rect(0, 0, 0, 0)
+    rect_popup = pygame.Rect(0, 0, 0, 0)
 
     def draw_bg():
         if video.available:
@@ -333,7 +334,7 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
         screen.blit(txt, txt.get_rect(center=rect.center))
 
     def draw_stats_overlay():
-        nonlocal rect_prev, rect_next, rect_close
+        nonlocal rect_prev, rect_next, rect_close, rect_popup
 
         overlay = pygame.Surface((W, H), pygame.SRCALPHA)
         overlay.fill((0, 20, 50, 165))
@@ -342,6 +343,7 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
         box_w, box_h = int(W * 0.88), int(H * 0.62)
         box_x, box_y = (W - box_w) // 2, (H - box_h) // 2
         box = pygame.Rect(box_x, box_y, box_w, box_h)
+        rect_popup = box
 
         pygame.draw.rect(screen, (0, 116, 188), box)
         pygame.draw.rect(screen, (255, 255, 255), box, 3)
@@ -353,7 +355,7 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
         title = font_title.render(f'STATS - {map_name}', True, (255, 255, 255))
         screen.blit(title, (box_x + 24, box_y + 16))
 
-        hint = font_hint.render('Click map thumbnail to switch table', True, (215, 240, 255))
+        hint = font_hint.render('Use < and > to switch map table', True, (215, 240, 255))
         screen.blit(hint, (box_x + 24, box_y + 52))
 
         rect_close = pygame.Rect(box.right - 44, box.y + 10, 30, 30)
@@ -442,6 +444,20 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
                 video.release()
                 return None
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                if show_stats:
+                    if rect_close.collidepoint(event.pos):
+                        show_stats = False
+                        continue
+                    if rect_prev.collidepoint(event.pos):
+                        stats_map_idx = (stats_map_idx - 1) % len(MAP_LIST)
+                        continue
+                    if rect_next.collidepoint(event.pos):
+                        stats_map_idx = (stats_map_idx + 1) % len(MAP_LIST)
+                        continue
+                    if not rect_popup.collidepoint(event.pos):
+                        show_stats = False
+                    continue
+
                 # Back button luôn hoạt động
                 if rect_back.collidepoint(event.pos):
                     draw_scene()
@@ -458,20 +474,6 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
                     if r.collidepoint(event.pos):
                         map_clicked = i
                         break
-
-                if show_stats:
-                    if rect_close.collidepoint(event.pos):
-                        show_stats = False
-                        continue
-                    if rect_prev.collidepoint(event.pos):
-                        stats_map_idx = (stats_map_idx - 1) % len(MAP_LIST)
-                        continue
-                    if rect_next.collidepoint(event.pos):
-                        stats_map_idx = (stats_map_idx + 1) % len(MAP_LIST)
-                        continue
-                    if map_clicked is not None:
-                        stats_map_idx = map_clicked
-                    continue
 
                 if map_clicked is not None:
                     draw_scene()
