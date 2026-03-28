@@ -1,165 +1,203 @@
 """
 renderer.py
-Vẽ Grid và trạng thái thuật toán lên màn hình Pygame.
+Vẽ Grid lên màn hình Pygame bằng ảnh PNG thay thế màu cũ.
 
-Hỗ trợ 2 chế độ:
-  1. Kết quả cuối (explored + path)  — như cũ
-  2. Animate step-by-step từ bfs_steps() / dfs_steps():
-       - Đang chạy : frontier = VÀNG, explored = XANH NHẠT (1 màu duy nhất)
-       - Kết thúc  : đường đúng = ĐỎ ĐẬM, nhánh sai = ĐỎ NHẠT
+Quy tắc tile:
+  E  → normal_path.png  (cứ 3 ô thì 1 ô dùng normal_path2.png)
+       normal_path2 xoay 90° khi thuật toán đang dò theo trục Y
+  W  → wall.png
+  O  → cost_path.png
+  T  → good.png
+  G  → goal.png
+  P  → normal_path.png  (Start cũng dùng đường bình thường)
+
+Trong quá trình search:
+  explored   → explored.png  (đè lên ô đã dò)
+  frontier   → current_search.png  (ô đang xét)
+  Shipper    → CHƯA hiện
+
+Sau khi search xong (done):
+  - Reset map về trạng thái ban đầu
+  - Shipper xuất hiện, đi từng ô theo path
+  - Ô shipper đã đi qua → final_path.png
 """
 
+import os
 import pygame
 from typing import Dict, List, Optional, Set, Tuple
 from core.grid import Grid
-from gui.colors import (
-    CELL_COLORS, EXPLORED_COLOR, FRONTIER_COLOR,
-    PATH_COLOR, PATH_WRONG_COLOR,
-    GRID_LINE, TEXT_DARK,
-)
 
 CELL_SIZE = 36
 MARGIN    = 1
 
 
+def _load(path: str, size: tuple) -> pygame.Surface:
+    """Load và scale ảnh về đúng CELL_SIZE × CELL_SIZE. Fallback nếu thiếu file."""
+    if os.path.exists(path):
+        img = pygame.image.load(path).convert_alpha()
+        return pygame.transform.smoothscale(img, size)
+    surf = pygame.Surface(size, pygame.SRCALPHA)
+    surf.fill((200, 200, 200, 255))
+    return surf
+
+
 class Renderer:
-    def __init__(self, grid: Grid, offset_x: int = 0, offset_y: int = 0):
-        self.grid     = grid
-        self.offset_x = offset_x
-        self.offset_y = offset_y
+    def __init__(self, grid: Grid, offset_x: int = 0, offset_y: int = 0,
+                 base_dir: str = ''):
+        self.grid      = grid
+        self.offset_x  = offset_x
+        self.offset_y  = offset_y
+        self.base_dir  = base_dir
+        self._cell     = (CELL_SIZE, CELL_SIZE)
 
-        pygame.font.init()
-        self.font_cell  = pygame.font.SysFont('Arial', 11, bold=True)
-        self.font_label = pygame.font.SysFont('Arial', 13, bold=True)
+        # ── Tải sprites ──────────────────────────────────────────────────
+        pic = lambda name: os.path.join(base_dir, 'picture', name)
 
-    # ── Vẽ kết quả cuối (chế độ cũ) ──────────────────────────────────────
+        self.spr_normal      = _load(pic('normal_path.png'),   self._cell)
+        self.spr_normal2     = _load(pic('normal_path2.png'),  self._cell)
+        self.spr_normal2_rot = pygame.transform.rotate(self.spr_normal2, 90)
+        self.spr_wall        = _load(pic('wall.png'),          self._cell)
+        self.spr_cost        = _load(pic('cost_path.png'),     self._cell)
+        self.spr_good        = _load(pic('good.png'),          self._cell)
+        self.spr_goal        = _load(pic('goal.png'),          self._cell)
+        self.spr_explored    = _load(pic('explored.png'),      self._cell)
+        self.spr_current     = _load(pic('current_search.png'),self._cell)
+        self.spr_final       = _load(pic('final_path.png'),    self._cell)
 
-    def draw(
-        self,
-        surface:  pygame.Surface,
-        explored: Optional[Set[Tuple[int, int]]] = None,
-        frontier: Optional[Set[Tuple[int, int]]] = None,
-        path:     Optional[List[Tuple[int, int]]] = None,
-    ):
-        explored = explored or set()
-        frontier = frontier or set()
-        path_set = set(path) if path else set()
-
-        for r in range(self.grid.rows):
-            for c in range(self.grid.cols):
-                self._draw_cell_classic(surface, r, c, explored, frontier, path_set)
-
-    def _draw_cell_classic(self, surface, row, col, explored, frontier, path_set):
-        node = self.grid.get_node(row, col)
-        pos  = (row, col)
-
-        if pos in path_set and node.cell_type not in ('P', 'G'):
-            color = PATH_COLOR
-        elif pos in frontier:
-            color = FRONTIER_COLOR
-        elif pos in explored and node.cell_type not in ('P', 'G', 'W'):
-            color = EXPLORED_COLOR
+        # Shipper (dùng ảnh gốc, không scale về CELL_SIZE vì có thể to hơn)
+        shipper_raw = pic('shipper.png')
+        if os.path.exists(shipper_raw):
+            self.spr_shipper = pygame.image.load(shipper_raw).convert_alpha()
+            self.spr_shipper = pygame.transform.smoothscale(
+                self.spr_shipper, self._cell)
         else:
-            color = CELL_COLORS.get(node.cell_type, (240, 240, 240))
+            self.spr_shipper = pygame.Surface(self._cell, pygame.SRCALPHA)
+            self.spr_shipper.fill((255, 165, 0, 255))
 
-        self._blit_cell(surface, row, col, color, node.cell_type)
+        # ── Bảng tile cố định mỗi map (để dùng lại khi reset) ────────────
+        # Precompute ô nào dùng normal_path2 (cứ mỗi 3 ô E thì 1 ô dùng np2)
+        self._e_counter: Dict[Tuple[int,int], int] = {}
+        cnt = 0
+        for r in range(grid.rows):
+            for c in range(grid.cols):
+                if grid.get_node(r, c).cell_type in ('E', 'P'):
+                    self._e_counter[(r, c)] = cnt
+                    cnt += 1
 
-    # ── Vẽ animate step-by-step ───────────────────────────────────────────
+        # ── Trạng thái search/shipper ─────────────────────────────────────
+        self._phase         = 'idle'    # 'idle' | 'searching' | 'walking'
+        self._explored: Set = set()
+        self._frontier: Set = set()
+        self._final_path: List = []
+        self._visited_path: Set = set()   # ô shipper đã đi qua
+        self._shipper_pos: Optional[Tuple[int,int]] = None
+        self._direction   = 'x'          # hướng dò hiện tại: 'x' hoặc 'y'
 
-    def draw_step(
-        self,
-        surface:     pygame.Surface,
-        step:        dict,
-    ):
+    # ── Public API ────────────────────────────────────────────────────────
+
+    def set_phase_searching(self, explored: Set, frontier: Set,
+                            direction: str = 'x'):
+        """Gọi mỗi step khi đang search."""
+        self._phase    = 'searching'
+        self._explored = explored
+        self._frontier = frontier
+        self._direction = direction
+
+    def set_phase_walking(self, path: List[Tuple[int,int]]):
+        """Gọi sau khi search xong, bắt đầu cho shipper đi."""
+        self._phase        = 'walking'
+        self._final_path   = list(path)
+        self._visited_path = set()
+        self._shipper_pos  = path[0] if path else None
+        self._explored     = set()
+        self._frontier     = set()
+
+    def advance_shipper(self) -> bool:
         """
-        Vẽ 1 frame từ bfs_steps() generator.
-
-        step dict keys: explored, frontier, cell_branch, path, found, done
+        Di chuyển shipper thêm 1 bước trên path.
+        Trả về True nếu còn bước, False nếu đã tới đích.
         """
-        cell_branch: Dict[Tuple[int,int], int] = step.get("cell_branch", {})
-        explored:    Set  = step.get("explored",    set())
-        frontier:    Set  = step.get("frontier",    set())
-        path:        List = step.get("path",         [])
-        found:       bool = step.get("found",       False)
-        done:        bool = step.get("done",        False)
+        if not self._final_path:
+            return False
+        if self._shipper_pos in self._final_path:
+            idx = self._final_path.index(self._shipper_pos)
+        else:
+            return False
 
-        path_set = set(path) if path else set()
+        self._visited_path.add(self._shipper_pos)
 
+        if idx + 1 < len(self._final_path):
+            self._shipper_pos = self._final_path[idx + 1]
+            return True
+        return False
+
+    def reset_state(self):
+        self._phase        = 'idle'
+        self._explored     = set()
+        self._frontier     = set()
+        self._final_path   = []
+        self._visited_path = set()
+        self._shipper_pos  = None
+
+    # ── Draw ──────────────────────────────────────────────────────────────
+
+    def draw(self, surface: pygame.Surface):
+        """Vẽ toàn bộ grid theo phase hiện tại."""
         for r in range(self.grid.rows):
             for c in range(self.grid.cols):
-                self._draw_cell_step(
-                    surface, r, c,
-                    cell_branch, explored, frontier,
-                    path_set, found, done,
-                )
+                self._draw_cell(surface, r, c)
 
-        # Vẽ đường line lên trên khi done + found
-        if done and found and len(path) > 1:
-            self._draw_path_line(surface, path)
+        # Vẽ shipper lên trên cùng
+        if self._phase == 'walking' and self._shipper_pos is not None:
+            sr, sc = self._shipper_pos
+            x = self.offset_x + sc * (CELL_SIZE + MARGIN)
+            y = self.offset_y + sr * (CELL_SIZE + MARGIN)
+            surface.blit(self.spr_shipper, (x, y))
 
-    def _draw_cell_step(
-        self, surface, row, col,
-        cell_branch, explored, frontier,
-        path_set, found, done,
-    ):
+    def _draw_cell(self, surface: pygame.Surface, row: int, col: int):
         node = self.grid.get_node(row, col)
-        pos  = (row, col)
         ct   = node.cell_type
+        pos  = (row, col)
 
-        # Ô đặc biệt: Start, Goal, Wall — không đổi màu
-        if ct in ('P', 'G', 'W'):
-            color = CELL_COLORS[ct]
-            self._blit_cell(surface, row, col, color, ct)
-            return
+        x = self.offset_x + col * (CELL_SIZE + MARGIN)
+        y = self.offset_y + row * (CELL_SIZE + MARGIN)
 
-        if done and found:
-            # ── Kết quả cuối ──
-            # Đường đúng: ĐỎ ĐẬM | Nhánh sai: ĐỎ NHẠT | Chưa xét: màu gốc
-            if pos in path_set:
-                color = PATH_COLOR
-            elif pos in explored or pos in frontier:
-                color = PATH_WRONG_COLOR
-            else:
-                color = CELL_COLORS.get(ct, (240, 240, 240))
+        # 1. Vẽ tile nền (luôn vẽ trước)
+        base = self._base_sprite(row, col, ct)
+        surface.blit(base, (x, y))
 
-        elif pos in frontier:
-            # ── Đang chạy: frontier màu vàng ──
-            color = FRONTIER_COLOR
+        # 2. Đè overlay theo phase
+        if self._phase == 'searching':
+            if pos in self._frontier and ct not in ('W', 'G'):
+                surface.blit(self.spr_current, (x, y))
+            elif pos in self._explored and ct not in ('W', 'G', 'P'):
+                surface.blit(self.spr_explored, (x, y))
 
-        elif pos in explored:
-            # ── Đang chạy: explored màu xanh nhạt ──
-            color = EXPLORED_COLOR
+        elif self._phase == 'walking':
+            if ct not in ('W', 'G') and pos in self._visited_path:
+                surface.blit(self.spr_final, (x, y))
 
-        else:
-            color = CELL_COLORS.get(ct, (240, 240, 240))
+    def _base_sprite(self, row: int, col: int, ct: str) -> pygame.Surface:
+        """Trả về sprite nền cho ô (row, col) theo loại ô."""
+        if ct == 'W':
+            return self.spr_wall
+        if ct == 'O':
+            return self.spr_cost
+        if ct == 'T':
+            return self.spr_good
+        if ct == 'G':
+            return self.spr_goal
+        # E và P đều dùng normal_path / normal_path2
+        idx = self._e_counter.get((row, col), 0)
+        if idx % 4 == 3:          # cứ 3 normal_path thì 1 normal_path2
+            if self._direction == 'y':
+                return self.spr_normal2_rot
+            return self.spr_normal2
+        return self.spr_normal
 
-        self._blit_cell(surface, row, col, color, ct)
+    # ── Pixel helpers ─────────────────────────────────────────────────────
 
-    def _draw_path_line(self, surface, path):
-        """Vẽ đường line đỏ đậm nối các ô trong path."""
-        pts = []
-        for (r, c) in path:
-            x = self.offset_x + c * (CELL_SIZE + MARGIN) + CELL_SIZE // 2
-            y = self.offset_y + r * (CELL_SIZE + MARGIN) + CELL_SIZE // 2
-            pts.append((x, y))
-        if len(pts) >= 2:
-            pygame.draw.lines(surface, (180, 0, 0), False, pts, 3)
-
-    # ── Helper chung ──────────────────────────────────────────────────────
-
-    def _blit_cell(self, surface, row, col, color, cell_type):
-        x    = self.offset_x + col * (CELL_SIZE + MARGIN)
-        y    = self.offset_y + row * (CELL_SIZE + MARGIN)
-        rect = pygame.Rect(x, y, CELL_SIZE, CELL_SIZE)
-
-        pygame.draw.rect(surface, color, rect)
-        pygame.draw.rect(surface, GRID_LINE, rect, 1)
-
-        if cell_type in ('P', 'G', 'T', 'O'):
-            text_surf = self.font_cell.render(cell_type, True, TEXT_DARK)
-            surface.blit(text_surf, text_surf.get_rect(center=rect.center))
-
-    def pixel_to_cell(self, px, py):
+    def pixel_to_cell(self, px: int, py: int) -> Optional[Tuple[int,int]]:
         col = (px - self.offset_x) // (CELL_SIZE + MARGIN)
         row = (py - self.offset_y) // (CELL_SIZE + MARGIN)
         if self.grid.in_bounds(row, col):
@@ -167,18 +205,9 @@ class Renderer:
         return None
 
     @property
-    def grid_pixel_width(self):
+    def grid_pixel_width(self) -> int:
         return self.grid.cols * (CELL_SIZE + MARGIN)
 
     @property
-    def grid_pixel_height(self):
+    def grid_pixel_height(self) -> int:
         return self.grid.rows * (CELL_SIZE + MARGIN)
-
-
-# ── Tiện ích màu ──────────────────────────────────────────────────────────
-
-def _lighten(color: Tuple[int,int,int], factor: float) -> Tuple[int,int,int]:
-    return tuple(min(255, int(c * factor)) for c in color)
-
-def _darken(color: Tuple[int,int,int], factor: float) -> Tuple[int,int,int]:
-    return tuple(max(0, int(c * factor)) for c in color)
