@@ -344,7 +344,7 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
         overlay.fill((0, 20, 50, 165))
         screen.blit(overlay, (0, 0))
 
-        box_w, box_h = int(W * 0.88), int(H * 0.62)
+        box_w, box_h = int(W * 0.88), int(H * 0.65)
         box_x, box_y = (W - box_w) // 2, (H - box_h) // 2
         box = pygame.Rect(box_x, box_y, box_w, box_h)
         rect_popup = box
@@ -359,7 +359,7 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
         title = font_title.render(f'STATS - {map_name}', True, (255, 255, 255))
         screen.blit(title, (box_x + 24, box_y + 16))
 
-        hint = font_hint.render('Use < and > to switch map table', True, (215, 240, 255))
+        hint = font_hint.render('Use < > buttons on click or keyboard to arrow keys to switch map', True, (215, 240, 255))
         screen.blit(hint, (box_x + 24, box_y + 52))
 
         rect_close = pygame.Rect(box.right - 44, box.y + 10, 30, 30)
@@ -371,7 +371,7 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
         table_x = box_x + 20
         table_y = box_y + 82
         table_w = box_w - 40
-        row_h = 34
+        row_h = 40
 
         metrics = [
             ('cost', 'Cost'),
@@ -388,7 +388,7 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
             col_edges.append(col_edges[-1] + algo_col_w)
         col_edges.append(table_x + table_w)
 
-        # Header row: first column is metric label, other columns are algorithm names
+        # Header row
         header_rect = pygame.Rect(table_x, table_y, table_w, row_h)
         pygame.draw.rect(screen, (0, 95, 160), header_rect)
         pygame.draw.rect(screen, (255, 255, 255), header_rect, 1)
@@ -402,7 +402,7 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
             txt = font_header_algo.render(algo_name, True, (230, 247, 255))
             screen.blit(txt, txt.get_rect(center=((x1 + x2) // 2, table_y + row_h // 2)))
 
-        # Body: each row is one metric, each column is one algorithm
+        # Body
         y = table_y + row_h
         for row_idx, (metric_key, metric_label) in enumerate(metrics):
             row_rect = pygame.Rect(table_x, y, table_w, row_h)
@@ -447,32 +447,29 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
             if event.type == pygame.QUIT:
                 video.release()
                 return None
+            if event.type == pygame.KEYDOWN and show_stats:
+                if event.key == pygame.K_LEFT:
+                    stats_map_idx = (stats_map_idx - 1) % len(MAP_LIST)
+                elif event.key == pygame.K_RIGHT:
+                    stats_map_idx = (stats_map_idx + 1) % len(MAP_LIST)
+                elif event.key in (pygame.K_ESCAPE, pygame.K_RETURN):
+                    show_stats = False
+                continue
+
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                # ── Stats overlay đang mở: chỉ xử lý click bên trong overlay ──
                 if show_stats:
                     if rect_close.collidepoint(event.pos):
                         show_stats = False
-                        continue
-                    if rect_prev.collidepoint(event.pos):
+                    elif rect_prev.collidepoint(event.pos):
                         stats_map_idx = (stats_map_idx - 1) % len(MAP_LIST)
-                        continue
-                    if rect_next.collidepoint(event.pos):
+                    elif rect_next.collidepoint(event.pos):
                         stats_map_idx = (stats_map_idx + 1) % len(MAP_LIST)
-                        continue
-                    if not rect_popup.collidepoint(event.pos):
+                    elif not rect_popup.collidepoint(event.pos):
                         show_stats = False
-                    continue
+                    continue  # block tất cả click khác khi overlay mở
 
-                # Back button luôn hoạt động
-                if rect_back.collidepoint(event.pos):
-                    draw_scene()
-                    fade(screen, clock, fade_out=True)
-                    video.release()
-                    return 'back'
-
-                if rect_stats.collidepoint(event.pos):
-                    show_stats = not show_stats
-                    continue
-
+                # ── Check card map TRƯỚC để tránh overlap với back button ──
                 map_clicked = None
                 for i, r in enumerate(card_rects):
                     if r.collidepoint(event.pos):
@@ -484,6 +481,16 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
                     fade(screen, clock, fade_out=True)
                     video.release()
                     return os.path.join(base_dir, MAP_LIST[map_clicked][1])
+
+                if rect_stats.collidepoint(event.pos):
+                    show_stats = True
+                    continue
+
+                if rect_back.collidepoint(event.pos):
+                    draw_scene()
+                    fade(screen, clock, fade_out=True)
+                    video.release()
+                    return 'back'
 
         draw_scene()
         pygame.display.flip()
