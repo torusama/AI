@@ -24,17 +24,17 @@ def dfs(grid: Grid):
 
     t0 = time.time()
 
-    stack   = [start]
+    stack   = [(None, start)]
     visited = set()
-    parent  = {start: None}
+    parent  = {}
     found   = False
 
     while stack:
-        curr = stack.pop()
-
+        prev, curr = stack.pop()
         if curr in visited:
             continue
         visited.add(curr)
+        parent[curr] = prev 
 
         if curr == goal:
             found = True
@@ -44,9 +44,7 @@ def dfs(grid: Grid):
         for neighbor, _ in reversed(grid.get_neighbors(row, col)):
             npos = neighbor.position
             if npos not in visited:
-                if npos not in parent:
-                    parent[npos] = curr
-                stack.append(npos)
+                stack.append((curr, npos)) 
 
     time_ms = (time.time() - t0) * 1000
 
@@ -108,8 +106,7 @@ def dfs_steps(grid: Grid):
     cell_branch  = {start: 0}
     next_branch  = [1]
 
-    stack        = [start]
-    stack_branch = [0]     # branch tương ứng mỗi phần tử trên stack
+    stack = [(None, start, 0)]    # branch tương ứng mỗi phần tử trên stack
     visited      = set()
     parent       = {start: None}
     found        = False
@@ -130,14 +127,14 @@ def dfs_steps(grid: Grid):
     yield {**snap(), "frontier": frozenset([start])}
 
     while stack:
-        curr        = stack.pop()
-        curr_branch = stack_branch.pop()
+        prev, curr, curr_branch = stack.pop()
 
         if curr in visited:
             yield snap()
             continue
 
         visited.add(curr)
+        parent[curr] = prev 
         cell_branch[curr] = curr_branch
 
         if curr == goal:
@@ -149,14 +146,8 @@ def dfs_steps(grid: Grid):
         for neighbor, _ in reversed(grid.get_neighbors(row, col)):
             npos = neighbor.position
             if npos not in visited:
-                if npos not in parent:
-                    parent[npos] = curr
                 new_neighbors.append(npos)
 
-        # Gán branch cho hàng xóm mới
-        # DFS push ngược: ô đầu tiên sẽ được pop đầu tiên (đi sâu)
-        # → ô đầu tiên kế thừa branch hiện tại
-        # → các ô còn lại (sẽ backtrack tới) tạo branch mới
         for i, npos in enumerate(new_neighbors):
             if i == 0:
                 b = curr_branch
@@ -164,10 +155,9 @@ def dfs_steps(grid: Grid):
                 b = next_branch[0]
                 next_branch[0] += 1
             cell_branch.setdefault(npos, b)
-            stack.append(npos)
-            stack_branch.append(b)
+            stack.append((curr, npos, b))
 
-        yield snap()
+            yield snap()
 
     time_ms = (time.time() - t0) * 1000
 
