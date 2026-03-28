@@ -13,6 +13,12 @@ Flow:
 import os
 import sys
 import pygame
+try:
+    import cv2
+    import numpy as np
+    _CV2_AVAILABLE = True
+except ImportError:
+    _CV2_AVAILABLE = False
 
 from core.grid import Grid
 from Algorithm.bfs import bfs_steps
@@ -70,6 +76,55 @@ def load_img(path: str, size=None) -> pygame.Surface:
     surf = pygame.Surface(size or (100, 100), pygame.SRCALPHA)
     surf.fill((80, 80, 80))
     return surf
+
+
+class VideoPlayer:
+    """
+    Stream video frame-by-frame — không preload, không lag lúc khởi động.
+    Tự động sync theo FPS gốc của video và loop lại khi hết.
+    """
+    def __init__(self, path: str, size):
+        self._path    = path
+        self._size    = size
+        self._cap     = None
+        self._fps     = 30.0
+        self._ms_per_frame = 1000 / 30.0
+        self._last_ms = 0
+        self._current = None
+        self.available = False
+
+        if _CV2_AVAILABLE and os.path.exists(path):
+            self._cap = cv2.VideoCapture(path)
+            self._fps = self._cap.get(cv2.CAP_PROP_FPS) or 30.0
+            self._ms_per_frame = 1000.0 / self._fps
+            self.available = True
+            self._read_next()   # load frame đầu tiên ngay
+
+    def _read_next(self):
+        if self._cap is None:
+            return
+        ret, frame = self._cap.read()
+        if not ret:                          # hết video -> loop
+            self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            ret, frame = self._cap.read()
+        if ret:
+            W, H = self._size
+            frame = cv2.resize(frame, (W, H))
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            self._current = pygame.surfarray.make_surface(frame.swapaxes(0, 1))
+
+    def get_frame(self):
+        """Gọi mỗi game loop — trả về frame hiện tại, tự advance khi đủ thời gian."""
+        now = pygame.time.get_ticks()
+        if now - self._last_ms >= self._ms_per_frame:
+            self._last_ms = now
+            self._read_next()
+        return self._current
+
+    def release(self):
+        if self._cap:
+            self._cap.release()
+            self._cap = None
 
 
 def fade(screen: pygame.Surface, clock: pygame.time.Clock,
@@ -165,7 +220,11 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
     W, H = screen.get_size()
     pic  = lambda name: os.path.join(base_dir, "picture", name)
 
-    bg       = load_img(pic("choose_map.png"), (W, H))
+    # Try video first, fallback to static image
+    video_path = pic("choose_map.mp4")
+    video      = VideoPlayer(video_path, (W, H))
+    bg         = load_img(pic("choose_map.png"), (W, H)) if not video.available else None
+
     img_back = load_img(pic("back_button.png"))
 
     back_w   = int(W * 0.42)
@@ -196,8 +255,16 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
             card_w, card_h
         ))
 
+    def draw_bg():
+        if video.available:
+            frame = video.get_frame()
+            if frame:
+                screen.blit(frame, (0, 0))
+        else:
+            screen.blit(bg, (0, 0))
+
     # Draw once before fade-in
-    screen.blit(bg, (0, 0))
+    draw_bg()
     screen.blit(img_back, rect_back)
 
     for rect, thumb in zip(card_rects, thumbs):
@@ -210,30 +277,33 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
+                video.release()
                 return None
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if rect_back.collidepoint(event.pos):
-                    screen.blit(bg, (0, 0))
+                    draw_bg()
                     screen.blit(img_back, rect_back)
 
                     for rect, thumb in zip(card_rects, thumbs):
                         screen.blit(thumb, rect)
 
                     fade(screen, clock, fade_out=True)
+                    video.release()
                     return 'back'
 
                 for i, r in enumerate(card_rects):
                     if r.collidepoint(event.pos):
-                        screen.blit(bg, (0, 0))
+                        draw_bg()
                         screen.blit(img_back, rect_back)
 
                         for rect, thumb in zip(card_rects, thumbs):
                             screen.blit(thumb, rect)
 
                         fade(screen, clock, fade_out=True)
+                        video.release()
                         return os.path.join(base_dir, MAP_LIST[i][1])
 
-        screen.blit(bg, (0, 0))
+        draw_bg()
         screen.blit(img_back, rect_back)
 
         for rect, thumb in zip(card_rects, thumbs):
