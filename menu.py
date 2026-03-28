@@ -344,7 +344,7 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
         overlay.fill((0, 20, 50, 165))
         screen.blit(overlay, (0, 0))
 
-        box_w, box_h = int(W * 0.88), int(H * 0.62)
+        box_w, box_h = int(W * 0.88), int(H * 0.65)
         box_x, box_y = (W - box_w) // 2, (H - box_h) // 2
         box = pygame.Rect(box_x, box_y, box_w, box_h)
         rect_popup = box
@@ -371,7 +371,7 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
         table_x = box_x + 20
         table_y = box_y + 82
         table_w = box_w - 40
-        row_h = 34
+        row_h = 40
 
         metrics = [
             ('cost', 'Cost'),
