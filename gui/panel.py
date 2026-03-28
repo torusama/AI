@@ -1,31 +1,26 @@
 """
-panel.py  –  HUD-style sidebar, no glass, no rounded borders
-  • Nền: scanlines + floating particles animated
-  • Section dividers: đường kẻ ngang cyan mỏng + label trái
-  • Khoảng cách section rộng rãi
-  • Heuristic row luôn có trong layout, chỉ ẩn khi không cần
-  • Font: Orbitron → Exo → Verdana (game-style)
-  • Không emoji – ASCII only
+panel.py  –  HUD sidebar – flat 2D, cartoon font, ocean blue panel
 """
 
 import os, math, random
 import pygame
 
 # ── Palette ────────────────────────────────────────────────────────────────────
-PANEL_BG      = (12, 8, 28)           # deep purple-black
-ACCENT        = (0, 255, 220)         # neon mint
-ACCENT2       = (255, 60, 180)        # hot pink
-ACCENT3       = (255, 230, 0)         # electric yellow
-TEXT_BRIGHT   = (230, 245, 255)
-TEXT_DIM      = (120, 140, 180)
-TEXT_LABEL    = (0, 255, 220)
-LINE_COLOR    = (0, 255, 220)
-BTN_DISABLED  = (30, 28, 55)
-BTN_TEXT_DIS  = (80, 80, 120)
-BTN_RUN_C     = (255, 220, 0)
-BTN_PAUSE_C   = (255, 50, 170)
-BTN_RESET_C   = (255, 30, 80)
-BTN_SPEED_UNS = (22, 18, 50)
+PANEL_BG      = (0, 185, 255)
+ACCENT        = (255, 255, 255)
+ACCENT2       = (0, 230, 215)
+ACCENT3       = (200, 245, 255)
+TEXT_BRIGHT   = (255, 255, 255)
+TEXT_DIM      = (50, 130, 180)
+TEXT_LABEL    = (255, 255, 255)
+LINE_COLOR    = (255, 255, 255)
+BTN_DISABLED  = (160, 210, 235)
+BTN_TEXT_DIS  = (200, 225, 240)
+BTN_RUN_C     = (0, 140, 220)
+BTN_PAUSE_C   = (0, 170, 190)
+BTN_RESET_C   = (20, 100, 200)
+BTN_SPEED_UNS = (80, 175, 225)
+BTN_SPEED_SEL = (0, 100, 200)
 
 SPEED_LEVELS = [
     ('Slow',   60),
@@ -39,7 +34,9 @@ HEURISTIC_ALGOS = {'A*', 'IDA*'}
 
 # ── Font helper ────────────────────────────────────────────────────────────────
 def _game_font(size: int, bold: bool = False) -> pygame.font.Font:
-    for name in ('Orbitron', 'Exo 2', 'Exo', 'Rajdhani', 'Verdana', 'Segoe UI'):
+    # Ưu tiên font hoạt hình cứng cáp
+    for name in ('Bangers', 'Lilita One', 'Fredoka One', 'Boogaloo',
+                 'Arial Black', 'Impact', 'Rajdhani', 'Exo 2', 'Verdana'):
         try:
             f = pygame.font.SysFont(name, size, bold=bold)
             if f:
@@ -55,7 +52,7 @@ def _load_img(path: str, size: tuple) -> pygame.Surface:
         img = pygame.image.load(path).convert_alpha()
         return pygame.transform.smoothscale(img, size)
     surf = pygame.Surface(size, pygame.SRCALPHA)
-    surf.fill((20, 30, 50, 200))
+    surf.fill((20, 130, 200, 200))
     return surf
 
 
@@ -68,14 +65,14 @@ class _Particle:
         self.y     = random.uniform(0, h)
         self.vy    = random.uniform(-0.15, -0.45)
         self.r     = random.randint(1, 2)
-        self.alpha = random.randint(40, 130)
-        self.color = random.choice([(0, 220, 255), (0, 160, 200), (80, 200, 255)])
+        self.alpha = random.randint(30, 90)
+        self.color = random.choice([(255, 255, 255), (200, 240, 255), (180, 230, 255)])
 
     def update(self, h):
         self.y += self.vy
         if self.y < -4:
             self.y = h + 4
-            self.alpha = random.randint(40, 130)
+            self.alpha = random.randint(30, 90)
 
     def draw(self, surf, ox, oy):
         s = pygame.Surface((self.r * 2 + 1, self.r * 2 + 1), pygame.SRCALPHA)
@@ -83,132 +80,35 @@ class _Particle:
         surf.blit(s, (ox + int(self.x) - self.r, oy + int(self.y) - self.r))
 
 
-def _glow_line(surface, p1, p2, color, width=2, layers=4):
-    """Vẽ đường thẳng có bloom glow nhiều lớp – kiểu anime lightsaber."""
-    r, g, b = color
-    for i in range(layers, 0, -1):
-        a   = int(60 * (i / layers) ** 2)
-        w   = width + (layers - i) * 3
-        s   = pygame.Surface((surface.get_width(), surface.get_height()), pygame.SRCALPHA)
-        pygame.draw.line(s, (r, g, b, a), p1, p2, w)
-        surface.blit(s, (0, 0))
-    pygame.draw.line(surface, (min(255, r + 80), min(255, g + 80), min(255, b + 80)),
-                     p1, p2, width)
+# ── Background ─────────────────────────────────────────────────────────────────
+# Cache ảnh panel để không load lại mỗi frame
+_panel_bg_cache = {}
+
+def _draw_panel_bg(surface, rect, t, base_dir=''):
+    """Dùng panel.png làm nền, scale vừa rect."""
+    global _panel_bg_cache
+    key = (rect.width, rect.height)
+    if key not in _panel_bg_cache:
+        path = os.path.join(base_dir, 'picture', 'panel.png')
+        if os.path.exists(path):
+            img = pygame.image.load(path).convert()
+            img = pygame.transform.smoothscale(img, key)
+        else:
+            img = pygame.Surface(key)
+            img.fill((0, 110, 180))
+        _panel_bg_cache[key] = img
+    surface.blit(_panel_bg_cache[key], rect.topleft)
 
 
-def _glow_rect_border(surface, rect, color, width=2, layers=5):
-    """Viền rect có anime glow bloom."""
-    r, g, b = color
-    s = pygame.Surface((rect.width + layers * 6, rect.height + layers * 6), pygame.SRCALPHA)
-    ox, oy = layers * 3, layers * 3
-    for i in range(layers, 0, -1):
-        a  = int(80 * (i / layers) ** 2)
-        ex = layers - i
-        pygame.draw.rect(s, (r, g, b, a),
-                         pygame.Rect(ox - ex, oy - ex,
-                                     rect.width + ex * 2, rect.height + ex * 2), width + 1)
-    pygame.draw.rect(s, (min(255, r + 100), min(255, g + 100), min(255, b + 100)),
-                     pygame.Rect(ox, oy, rect.width, rect.height), width)
-    surface.blit(s, (rect.x - layers * 3, rect.y - layers * 3))
-
-
-def _draw_pixel_grid(surface, rect, t):
-    """Lưới pixel nhỏ mờ – flat pixel art texture."""
-    gs = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
-    step = 8
-    drift_x = int(t * 4) % step
-    drift_y = int(t * 2) % step
-    x = -step + drift_x
-    while x < rect.width:
-        pygame.draw.line(gs, (0, 255, 220, 10), (x, 0), (x, rect.height), 1)
-        x += step
-    y = -step + drift_y
-    while y < rect.height:
-        pygame.draw.line(gs, (0, 255, 220, 8), (0, y), (rect.width, y), 1)
-        y += step
-    surface.blit(gs, rect.topleft)
-
-
-def _draw_neon_scanline(surface, rect, t):
-    """Một dải sáng neon chạy từ trên xuống dưới lặp lại – kiểu anime CRT scan."""
-    h    = rect.height
-    scan_y = int((t * 90) % (h + 60)) - 30
-    band = 28
-    s    = pygame.Surface((rect.width, band * 2), pygame.SRCALPHA)
-    for dy in range(band):
-        fade = 1.0 - dy / band
-        a    = int(55 * fade * fade)
-        pygame.draw.line(s, (0, 255, 220, a), (0, dy), (rect.width, dy))
-        pygame.draw.line(s, (0, 255, 220, a), (0, band * 2 - 1 - dy), (rect.width, band * 2 - 1 - dy))
-    if 0 <= scan_y < h:
-        surface.blit(s, (rect.x, rect.y + scan_y - band))
-
-
-def _draw_anime_glow_bg(surface, rect, t):
-    """Nền: gradient tím-đen + neon glow viền + pixel grid + scanline chạy."""
-    w, h = rect.width, rect.height
-
-    # Gradient nền: tím đậm trên → đen tím dưới
-    bg = pygame.Surface((w, h), pygame.SRCALPHA)
-    for y in range(h):
-        progress = y / h
-        r = int(18  + 6  * (1 - progress))
-        g = int(8   + 4  * (1 - progress))
-        b = int(45  + 15 * (1 - progress))
-        pygame.draw.line(bg, (r, g, b, 255), (0, y), (w, y))
-    surface.blit(bg, rect.topleft)
-
-    # Pixel grid
-    _draw_pixel_grid(surface, rect, t)
-
-    # Neon scanline chạy
-    _draw_neon_scanline(surface, rect, t)
-
-    # Viền neon glow mint pulse
-    pulse_a = int(190 + 60 * math.sin(t * 2.2))
-    mint = (0, min(255, pulse_a), 200)
-    _glow_rect_border(surface, rect, mint, width=2, layers=6)
-
-    # Góc accent: pixel brackets kiểu retro game, màu hot pink
-    arm = 20
-    pk  = (255, 60, 180)
-    bk  = pygame.Surface((w, h), pygame.SRCALPHA)
-    pulse_pk = int(180 + 70 * math.sin(t * 1.7 + 1.0))
-    for cx, cy, sx, sy in [(0,0,1,1),(w-1,0,-1,1),(0,h-1,1,-1),(w-1,h-1,-1,-1)]:
-        for i in range(3):   # 3-pixel thick bracket = pixel style
-            pygame.draw.line(bk, (*pk, pulse_pk - i*30),
-                             (cx + i*sx, cy), (cx + sx*(arm - i), cy), 1)
-            pygame.draw.line(bk, (*pk, pulse_pk - i*30),
-                             (cx, cy + i*sy), (cx, cy + sy*(arm - i)), 1)
-    surface.blit(bk, rect.topleft)
-
-
-def _draw_panel_bg(surface, rect, t):
-    _draw_anime_glow_bg(surface, rect, t)
-
-
+# ── Divider flat ───────────────────────────────────────────────────────────────
 def _draw_divider(surface, x, y, w, label, font, t=0.0):
-    """Divider với anime glow bloom."""
-    pulse = int(190 + 60 * math.sin(t * 1.8))
-    color = (0, pulse, 200)
-    # glow bloom layers
-    for layer in range(4, 0, -1):
-        a  = int(50 * (layer / 4) ** 2)
-        lw = layer * 2
-        s  = pygame.Surface((w, lw * 2 + 2), pygame.SRCALPHA)
-        pygame.draw.line(s, (0, 255, 210, a), (0, lw), (w, lw), lw)
-        surface.blit(s, (x, y - lw))
-    # core bright line
-    pygame.draw.line(surface, color, (x, y), (x + w, y), 1)
+    """Chỉ vẽ label, không có line."""
     if label:
         lbl = font.render(label, True, TEXT_LABEL)
-        bg  = pygame.Surface((lbl.get_width() + 10, lbl.get_height() + 2), pygame.SRCALPHA)
-        bg.fill((12, 8, 28, 240))
-        surface.blit(bg, (x, y - lbl.get_height() // 2 - 1))
-        surface.blit(lbl, (x + 5, y - lbl.get_height() // 2))
+        surface.blit(lbl, (x, y - lbl.get_height() // 2))
 
 
-# ── Button ─────────────────────────────────────────────────────────────────────
+# ── Button flat ────────────────────────────────────────────────────────────────
 class FlatButton:
     def __init__(self, rect, label, color, text_color=TEXT_BRIGHT, font_size=14):
         self.rect       = rect
@@ -221,30 +121,14 @@ class FlatButton:
     def draw(self, surface, disabled=False, t=0.0):
         if disabled:
             pygame.draw.rect(surface, BTN_DISABLED, self.rect)
-            pygame.draw.rect(surface, (50, 45, 90), self.rect, 1)
+            pygame.draw.rect(surface, (255, 255, 255), self.rect, 2)
             txt = self.font.render(self.label, True, BTN_TEXT_DIS)
-        else:
-            c = tuple(min(255, v + 35) for v in self.color) if self.hovered else self.color
-            # glow bloom behind button when hovered
-            if self.hovered:
-                gs = pygame.Surface((self.rect.width + 20, self.rect.height + 20), pygame.SRCALPHA)
-                for i in range(5, 0, -1):
-                    a = int(40 * (i / 5) ** 2)
-                    pygame.draw.rect(gs, (*c, a),
-                                     pygame.Rect(10 - i*2, 10 - i*2,
-                                                 self.rect.width + i*4, self.rect.height + i*4))
-                surface.blit(gs, (self.rect.x - 10, self.rect.y - 10))
-            pygame.draw.rect(surface, c, self.rect)
-            # shine top strip
-            shine = pygame.Surface((self.rect.width, max(1, self.rect.height // 3)), pygame.SRCALPHA)
-            shine.fill((255, 255, 255, 30))
-            surface.blit(shine, self.rect.topleft)
-            # pixel-style 1px bright border
-            r, g, b = c
-            pygame.draw.rect(surface,
-                             (min(255,r+120), min(255,g+120), min(255,b+120)),
-                             self.rect, 1)
-            txt = self.font.render(self.label, True, self.text_color)
+            surface.blit(txt, txt.get_rect(center=self.rect.center))
+            return
+        c = tuple(max(0, v - 25) for v in self.color) if self.hovered else self.color
+        pygame.draw.rect(surface, c, self.rect)
+        pygame.draw.rect(surface, (255, 255, 255), self.rect, 2)
+        txt = self.font.render(self.label, True, self.text_color)
         surface.blit(txt, txt.get_rect(center=self.rect.center))
 
     def update(self, pos):
@@ -256,7 +140,7 @@ class FlatButton:
                 and self.rect.collidepoint(event.pos))
 
 
-# ── Panel ─────────────────────────────────────────────────────────────────────
+# ── Panel ──────────────────────────────────────────────────────────────────────
 class Panel:
     _PAD       = 22
     _SEC_GAP   = 30
@@ -273,12 +157,12 @@ class Panel:
         self._t       = 0.0
 
         pygame.font.init()
-        self.f_section = _game_font(18, bold=True)
-        self.f_algo    = _game_font(22, bold=True)
-        self.f_btn     = _game_font(18, bold=True)
-        self.f_body    = _game_font(17, bold=True)
-        self.f_val     = _game_font(17)
-        self.f_arrow   = _game_font(22, bold=True)
+        self.f_section = _game_font(21, bold=True)
+        self.f_algo    = _game_font(25, bold=True)
+        self.f_btn     = _game_font(20, bold=True)
+        self.f_body    = _game_font(19, bold=True)
+        self.f_val     = _game_font(19)
+        self.f_arrow   = _game_font(25, bold=True)
 
         self.algo_idx               = 0
         self.heuristic_options      = ['manhattan', 'euclidean']
@@ -320,9 +204,9 @@ class Panel:
         cur += 28 + IG
         hw = bw // 2 - 5
         self._btn_manhattan = FlatButton(
-            pygame.Rect(x + P, cur, hw, SH), 'Manhattan', (0, 100, 180), font_size=17)
+            pygame.Rect(x + P, cur, hw, SH), 'Manhattan', (0, 120, 210), font_size=19)
         self._btn_euclidean = FlatButton(
-            pygame.Rect(x + P + hw + 10, cur, hw, SH), 'Euclidean', (50, 50, 160), font_size=17)
+            pygame.Rect(x + P + hw + 10, cur, hw, SH), 'Euclidean', (0, 90, 190), font_size=19)
         cur += SH + SG
 
         # SPEED
@@ -340,11 +224,11 @@ class Panel:
         cur += 28 + IG
         third = (bw - 12) // 3
         self.btn_run   = FlatButton(pygame.Rect(x + P, cur, third, BH),
-                                    'RUN', BTN_RUN_C, text_color=(30, 15, 0), font_size=14)
+                                    'RUN', BTN_RUN_C, text_color=TEXT_BRIGHT, font_size=17)
         self.btn_pause = FlatButton(pygame.Rect(x + P + third + 6, cur, third, BH),
-                                    'PAUSE', BTN_PAUSE_C, font_size=13)
+                                    'PAUSE', BTN_PAUSE_C, font_size=16)
         self.btn_reset = FlatButton(pygame.Rect(x + P + (third + 6) * 2, cur, third, BH),
-                                    'RESET', BTN_RESET_C, font_size=13)
+                                    'RESET', BTN_RESET_C, font_size=16)
         cur += BH + SG
 
         # RESULTS
@@ -353,9 +237,9 @@ class Panel:
         self._stats_top  = cur
         self._stat_row_h = 26
 
-        # Back map – giữ aspect ratio gốc, scale theo chiều cao
+        # Back map
         _orig_path = os.path.join(self.base_dir, 'picture', 'back_map.png')
-        bm_h = int((w - P * 2) * 0.08)
+        bm_h = int((w - P * 2) * 0.13)
         if os.path.exists(_orig_path):
             _tmp = pygame.image.load(_orig_path)
             _ow, _oh = _tmp.get_size()
@@ -403,11 +287,9 @@ class Panel:
             b.update(pos)
 
     def handle_keydown(self, event):
-        """Backward-compat wrapper."""
         return self.handle_event(event)
 
     def handle_event(self, event) -> bool:
-        """Xử lý cả keyboard (LEFT/RIGHT) lẫn click chuột vào mũi tên algo."""
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_LEFT:
                 self.algo_idx = (self.algo_idx - 1) % len(ALGO_KEYS)
@@ -469,12 +351,14 @@ class Panel:
 
     # Draw
     def draw(self, surface, animating=False, paused=False):
-        t   = self._t
-        P   = self._PAD
-        bw  = self.width - P * 2
+        t  = self._t
+        P  = self._PAD
+        bw = self.width - P * 2
         panel_rect = pygame.Rect(self.x, self.y, self.width, self.height)
 
-        _draw_panel_bg(surface, panel_rect, t)
+        _draw_panel_bg(surface, panel_rect, t, self.base_dir)
+
+        # Particles nhẹ (chấm trắng nổi)
         for p in self._particles:
             p.draw(surface, self.x, self.y)
 
@@ -485,15 +369,13 @@ class Panel:
 
         for btn_r, sym in [(self._rect_arrow_l, '<'), (self._rect_arrow_r, '>')]:
             hov = btn_r.collidepoint(mouse)
-            pygame.draw.rect(surface, (0, 120, 190) if hov else (150, 185, 215), btn_r)
-            pygame.draw.line(surface, (0, 255, 220), btn_r.topleft, btn_r.bottomleft, 2)
-            ts = self.f_arrow.render(sym, True, (12,8,28) if hov else (0,255,220))
+            pygame.draw.rect(surface, (0, 100, 190) if hov else (0, 140, 220), btn_r)
+            pygame.draw.rect(surface, (255, 255, 255), btn_r, 2)
+            ts = self.f_arrow.render(sym, True, (255, 255, 255))
             surface.blit(ts, ts.get_rect(center=btn_r.center))
 
-        pygame.draw.rect(surface, (20, 14, 50), self._algo_name_rect)
-        pulse_c = int(190 + 60 * math.sin(t * 2.2))
-        _glow_rect_border(surface, self._algo_name_rect,
-                          (0, pulse_c, 200), width=1, layers=5)
+        pygame.draw.rect(surface, (0, 130, 210), self._algo_name_rect)
+        pygame.draw.rect(surface, (255, 255, 255), self._algo_name_rect, 2)
         at = self.f_algo.render(self.selected_algo, True, TEXT_BRIGHT)
         surface.blit(at, at.get_rect(center=self._algo_name_rect.center))
 
@@ -503,18 +385,15 @@ class Panel:
         if self.needs_heuristic:
             for btn, idx in [(self._btn_manhattan, 0), (self._btn_euclidean, 1)]:
                 sel = (self.selected_heuristic_idx == idx)
-                btn.color      = (0, 170, 210) if sel else (18, 28, 55)
-                btn.text_color = (5, 5, 5) if sel else TEXT_DIM
+                btn.color      = BTN_SPEED_SEL if sel else BTN_SPEED_UNS
+                btn.text_color = TEXT_BRIGHT
                 btn.draw(surface, t=t)
-                if sel:
-                    pygame.draw.line(surface, ACCENT,
-                                     (btn.rect.x, btn.rect.bottom - 2),
-                                     (btn.rect.right, btn.rect.bottom - 2), 2)
         else:
-            ph = pygame.Surface((bw, self._SMALL_H), pygame.SRCALPHA)
-            ph.fill((20, 14, 50, 200))
-            surface.blit(ph, (self.x + P, self._btn_manhattan.rect.y))
-            msg = self.f_body.render('N/A for this algorithm', True, (50, 70, 95))
+            pygame.draw.rect(surface, BTN_SPEED_UNS,
+                             pygame.Rect(self.x + P, self._btn_manhattan.rect.y, bw, self._SMALL_H))
+            pygame.draw.rect(surface, (255, 255, 255),
+                             pygame.Rect(self.x + P, self._btn_manhattan.rect.y, bw, self._SMALL_H), 2)
+            msg = self.f_body.render('N/A for this algorithm', True, TEXT_BRIGHT)
             surface.blit(msg, msg.get_rect(
                 center=(self.x + P + bw // 2, self._btn_manhattan.rect.centery)))
 
@@ -523,17 +402,9 @@ class Panel:
 
         for i, (r, lbl) in enumerate(zip(self._speed_rects, ['SLOW', 'NORMAL', 'FAST', 'MAX'])):
             sel = (i == self.speed_idx)
-            if sel:
-                sh = int(175 + 45 * math.sin(t * 3.0))
-                pygame.draw.rect(surface, (0, sh, min(255, sh + 25)), r)
-                _glow_line(surface, r.bottomleft, r.bottomright, (0,255,220), width=2, layers=3)
-                r_top = (min(255,sh+80), min(255,sh+80), min(255,sh+100))
-                pygame.draw.rect(surface, r_top,
-                                 pygame.Rect(r.x, r.y, r.width, max(1, r.height//3)), 0)
-                tc = (5, 5, 5)
-            else:
-                pygame.draw.rect(surface, (22, 18, 50), r)
-                tc = TEXT_DIM
+            pygame.draw.rect(surface, BTN_SPEED_SEL if sel else BTN_SPEED_UNS, r)
+            pygame.draw.rect(surface, (255, 255, 255), r, 2)
+            tc = TEXT_BRIGHT if sel else (20, 60, 120)
             ts = self.f_btn.render(lbl, True, tc)
             surface.blit(ts, ts.get_rect(center=r.center))
 
@@ -551,18 +422,17 @@ class Panel:
         y_cur  = self._stats_top
         col2_x = self.x + P + bw // 2 + 10
         for key, val in self.stats.items():
-            k_surf = self.f_body.render(key + ':', True, TEXT_DIM)
+            k_surf = self.f_body.render(key + ':', True, (200, 235, 255))
             v_surf = self.f_val.render(val, True,
-                                       TEXT_BRIGHT if val != '--' else (70, 80, 120))
+                                       (255, 255, 255) if val != '--' else (150, 200, 230))
             surface.blit(k_surf, (self.x + P, y_cur))
             surface.blit(v_surf, (col2_x, y_cur))
             y_cur += self._stat_row_h
 
         # ── Back map ─────────────────────────────────────────────────────
-        hov   = self._back_map_rect.collidepoint(mouse)
-        scale = 1.05 if hov else 1.0
-        bm = self._back_map_img
-        if scale != 1.0:
+        hov = self._back_map_rect.collidepoint(mouse)
+        bm  = self._back_map_img
+        if hov:
             bm = pygame.transform.smoothscale(
-                bm, (int(bm.get_width() * scale), int(bm.get_height() * scale)))
+                bm, (int(bm.get_width() * 1.05), int(bm.get_height() * 1.05)))
         surface.blit(bm, bm.get_rect(center=self._back_map_rect.center))
