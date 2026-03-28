@@ -62,7 +62,7 @@ class Renderer:
         self.spr_goal        = _load(pic('goal.png'),          self._cell)
         self.spr_explored    = _load(pic('explored.png'),      self._cell)
         self.spr_current     = _load(pic('current_search.png'),self._cell)
-        self.spr_final       = _load(pic('final_path.png'),    self._cell)
+        self.spr_final       = _load(pic('explored.png'),    self._cell)
 
         # Shipper (dùng ảnh gốc, không scale về CELL_SIZE vì có thể to hơn)
         shipper_raw = pic('shipper.png')
