@@ -263,13 +263,15 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
         else:
             screen.blit(bg, (0, 0))
 
+    def draw_scene():
+        """Draw background → thumbnails → back button (back button luôn trên cùng)."""
+        draw_bg()
+        for rect, thumb in zip(card_rects, thumbs):
+            screen.blit(thumb, rect)
+        screen.blit(img_back, rect_back)
+
     # Draw once before fade-in
-    draw_bg()
-    screen.blit(img_back, rect_back)
-
-    for rect, thumb in zip(card_rects, thumbs):
-        screen.blit(thumb, rect)
-
+    draw_scene()
     fade(screen, clock, fade_out=False)
 
     while True:
@@ -280,35 +282,25 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
                 video.release()
                 return None
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                if rect_back.collidepoint(event.pos):
-                    draw_bg()
-                    screen.blit(img_back, rect_back)
+                # Check cards first to avoid overlap with back button
+                map_clicked = None
+                for i, r in enumerate(card_rects):
+                    if r.collidepoint(event.pos):
+                        map_clicked = i
+                        break
 
-                    for rect, thumb in zip(card_rects, thumbs):
-                        screen.blit(thumb, rect)
-
+                if map_clicked is not None:
+                    draw_scene()
+                    fade(screen, clock, fade_out=True)
+                    video.release()
+                    return os.path.join(base_dir, MAP_LIST[map_clicked][1])
+                elif rect_back.collidepoint(event.pos):
+                    draw_scene()
                     fade(screen, clock, fade_out=True)
                     video.release()
                     return 'back'
 
-                for i, r in enumerate(card_rects):
-                    if r.collidepoint(event.pos):
-                        draw_bg()
-                        screen.blit(img_back, rect_back)
-
-                        for rect, thumb in zip(card_rects, thumbs):
-                            screen.blit(thumb, rect)
-
-                        fade(screen, clock, fade_out=True)
-                        video.release()
-                        return os.path.join(base_dir, MAP_LIST[i][1])
-
-        draw_bg()
-        screen.blit(img_back, rect_back)
-
-        for rect, thumb in zip(card_rects, thumbs):
-            screen.blit(thumb, rect)
-
+        draw_scene()
         pygame.display.flip()
 
 
