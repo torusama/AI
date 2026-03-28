@@ -28,8 +28,9 @@ SPEED_LEVELS = [
     ('Fast',   10),
     ('Max',     2),
 ]
-ALGO_KEYS       = ['BFS', 'DFS', 'UCS', 'A*', 'Bidirectional Search', 'IDA*']
-HEURISTIC_ALGOS = {'A*', 'IDA*'}
+ALGO_KEYS       = ['BFS', 'DFS', 'UCS', 'A*', 'Greedy Search', 'Beam Search', 'Bidirectional Search', 'IDA*']
+HEURISTIC_ALGOS = {'A*', 'Greedy Search', 'Beam Search', 'IDA*'}
+BEAM_WIDTH_OPTIONS = [1, 2, 3, 5]
 
 
 # ── Font helper ────────────────────────────────────────────────────────────────
@@ -167,6 +168,7 @@ class Panel:
         self.algo_idx               = 0
         self.heuristic_options      = ['manhattan', 'euclidean']
         self.selected_heuristic_idx = 0
+        self.selected_beam_width_idx = 1
         self.speed_idx              = 1
         self.stats = {
             'Algorithm':   '--',
@@ -207,6 +209,16 @@ class Panel:
             pygame.Rect(x + P, cur, hw, SH), 'Manhattan', (0, 120, 210), font_size=19)
         self._btn_euclidean = FlatButton(
             pygame.Rect(x + P + hw + 10, cur, hw, SH), 'Euclidean', (0, 90, 190), font_size=19)
+        cur += SH + SG
+
+        # BEAM WIDTH
+        self._div_beam_y = cur + 10
+        cur += 28 + IG
+        beam_w = (bw - 9) // 4
+        self._beam_rects = [
+            pygame.Rect(x + P + i * (beam_w + 3), cur, beam_w, SH)
+            for i in range(len(BEAM_WIDTH_OPTIONS))
+        ]
         cur += SH + SG
 
         # SPEED
@@ -272,6 +284,14 @@ class Panel:
     def needs_heuristic(self):
         return self.selected_algo in HEURISTIC_ALGOS
 
+    @property
+    def needs_beam_width(self):
+        return self.selected_algo == 'Beam Search'
+
+    @property
+    def selected_beam_width(self):
+        return BEAM_WIDTH_OPTIONS[self.selected_beam_width_idx]
+
     # Stats
     def update_stats(self, algorithm, cost, length, nodes, time_ms):
         self.stats['Algorithm']   = str(algorithm)
@@ -329,6 +349,16 @@ class Panel:
                     return True
         return False
 
+    def handle_beam_width_click(self, event):
+        if not self.needs_beam_width:
+            return False
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            for i, r in enumerate(self._beam_rects):
+                if r.collidepoint(event.pos):
+                    self.selected_beam_width_idx = i
+                    return True
+        return False
+
     def is_back_map_clicked(self, event):
         return (event.type == pygame.MOUSEBUTTONDOWN
                 and event.button == 1
@@ -342,6 +372,8 @@ class Panel:
     def _shift(self, dx):
         for attr in ['_algo_name_rect', '_rect_arrow_l', '_rect_arrow_r', '_back_map_rect']:
             getattr(self, attr).x += dx
+        for r in self._beam_rects:
+            r.x += dx
         for r in self._speed_rects:
             r.x += dx
         for b in [self.btn_run, self.btn_pause, self.btn_reset,
@@ -402,6 +434,16 @@ class Panel:
                 center=(self.x + P + bw // 2, self._btn_manhattan.rect.centery)))
 
         # ── SPEED ────────────────────────────────────────────────────────
+        if self.needs_beam_width:
+            _draw_divider(surface, self.x + P, self._div_beam_y, bw, 'BEAM WIDTH', self.f_section, t)
+            for i, (r, value) in enumerate(zip(self._beam_rects, BEAM_WIDTH_OPTIONS)):
+                sel = (i == self.selected_beam_width_idx)
+                pygame.draw.rect(surface, BTN_SPEED_SEL if sel else BTN_SPEED_UNS, r)
+                pygame.draw.rect(surface, (255, 255, 255), r, 2)
+                tc = TEXT_BRIGHT if sel else (20, 60, 120)
+                ts = self.f_btn.render(f'K={value}', True, tc)
+                surface.blit(ts, ts.get_rect(center=r.center))
+
         _draw_divider(surface, self.x + P, self._div_speed_y, bw, 'SPEED', self.f_section, t)
 
         for i, (r, lbl) in enumerate(zip(self._speed_rects, ['SLOW', 'NORMAL', 'FAST', 'MAX'])):
