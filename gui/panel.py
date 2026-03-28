@@ -28,7 +28,7 @@ SPEED_LEVELS = [
     ('Fast',   10),
     ('Max',     2),
 ]
-ALGO_KEYS       = ['BFS', 'DFS', 'UCS', 'A*', 'Bidirectional', 'IDA*']
+ALGO_KEYS       = ['BFS', 'DFS', 'UCS', 'A*', 'Bidirectional Search', 'IDA*']
 HEURISTIC_ALGOS = {'A*', 'IDA*'}
 
 
@@ -263,6 +263,10 @@ class Panel:
     @property
     def step_delay_ms(self):
         return SPEED_LEVELS[self.speed_idx][1]
+
+    @property
+    def selected_speed_label(self):
+        return SPEED_LEVELS[self.speed_idx][0]
 
     @property
     def needs_heuristic(self):
