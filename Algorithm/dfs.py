@@ -108,13 +108,13 @@ def dfs_steps(grid: Grid):
 
     stack = [(None, start, 0)]    # branch tương ứng mỗi phần tử trên stack
     visited      = set()
-    parent       = {start: None}
+    parent = {}
     found        = False
 
     def snap():
         return {
             "explored":    frozenset(visited),
-            "frontier":    frozenset(stack),
+            "frontier": frozenset(pos for _, pos, _ in stack),
             "cell_branch": dict(cell_branch),
             "path":        [],
             "found":       False,
@@ -157,7 +157,7 @@ def dfs_steps(grid: Grid):
             cell_branch.setdefault(npos, b)
             stack.append((curr, npos, b))
 
-            yield snap()
+        yield snap()
 
     time_ms = (time.time() - t0) * 1000
 
@@ -172,7 +172,7 @@ def dfs_steps(grid: Grid):
 
     yield {
         "explored":    frozenset(visited),
-        "frontier":    frozenset(stack),
+        "frontier": frozenset(pos for _, pos, _ in stack),
         "cell_branch": dict(cell_branch),
         "path":        path,
         "found":       found,
