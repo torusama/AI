@@ -116,14 +116,14 @@ def screen_main_menu(screen: pygame.Surface, clock: pygame.time.Clock,
     img_start = load_img(pic("start_button.png"))
     img_exit  = load_img(pic("exit_button.png"))
 
-    btn_w   = int(W * 0.20)
+    btn_w   = int(W * 0.36)
     btn_h_s = int(img_start.get_height() * btn_w / img_start.get_width())
     btn_h_e = int(img_exit.get_height()  * btn_w / img_exit.get_width())
     img_start = pygame.transform.smoothscale(img_start, (btn_w, btn_h_s))
     img_exit  = pygame.transform.smoothscale(img_exit,  (btn_w, btn_h_e))
 
-    rect_start = img_start.get_rect(center=(W // 2, int(H * 0.57)))
-    rect_exit  = img_exit.get_rect(center=(W // 2,  int(H * 0.72)))
+    rect_start = img_start.get_rect(center=(int(W * 0.626), int(H * 0.57)))
+    rect_exit  = img_exit.get_rect(center=(int(W * 0.648),  int(H * 0.72)))
 
     # Draw once before fade-in
     screen.blit(bg, (0, 0))
@@ -168,18 +168,21 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
     bg       = load_img(pic("choose_map.png"), (W, H))
     img_back = load_img(pic("back_button.png"))
 
-    back_w   = int(W * 0.07)
+    back_w   = int(W * 0.42)
     back_h   = int(img_back.get_height() * back_w / img_back.get_width())
     img_back = pygame.transform.smoothscale(img_back, (back_w, back_h))
-    rect_back = img_back.get_rect(topleft=(int(W * 0.025), int(H * 0.035)))
+    rect_back = img_back.get_rect()
 
-    grid_w  = int(W * 0.72)
+    rect_back.x = -rect_back.width * 0.215
+    rect_back.y = H - rect_back.height * 0.71
+
+    grid_w  = int(W * 0.565)
     grid_x  = (W - grid_w) // 2
-    grid_y  = int(H * 0.14)
-    grid_h  = H - grid_y - int(H * 0.06)
+    grid_y  = int(H * 0.24)
+    grid_h  = H - grid_y - int(H * 0.24)
     cols, rows = 3, 2
-    gap_x   = int(W * 0.015)
-    gap_y   = int(H * 0.025)
+    gap_x   = int(W * 0.09)
+    gap_y   = int(H * 0.01)
     card_w  = (grid_w - gap_x * (cols - 1)) // cols
     card_h  = (grid_h - gap_y * (rows - 1)) // rows
 
@@ -195,6 +198,11 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
 
     # Draw once before fade-in
     screen.blit(bg, (0, 0))
+    screen.blit(img_back, rect_back)
+
+    for rect, thumb in zip(card_rects, thumbs):
+        screen.blit(thumb, rect)
+
     fade(screen, clock, fade_out=False)
 
     while True:
@@ -206,11 +214,22 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if rect_back.collidepoint(event.pos):
                     screen.blit(bg, (0, 0))
+                    screen.blit(img_back, rect_back)
+
+                    for rect, thumb in zip(card_rects, thumbs):
+                        screen.blit(thumb, rect)
+
                     fade(screen, clock, fade_out=True)
                     return 'back'
+
                 for i, r in enumerate(card_rects):
                     if r.collidepoint(event.pos):
                         screen.blit(bg, (0, 0))
+                        screen.blit(img_back, rect_back)
+
+                        for rect, thumb in zip(card_rects, thumbs):
+                            screen.blit(thumb, rect)
+
                         fade(screen, clock, fade_out=True)
                         return os.path.join(base_dir, MAP_LIST[i][1])
 
