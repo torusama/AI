@@ -5,7 +5,7 @@ Vẽ Grid lên màn hình Pygame bằng ảnh PNG thay thế màu cũ.
 Quy tắc tile:
   E  → normal_path.png  (cứ 3 ô thì 1 ô dùng normal_path2.png)
        normal_path2 xoay 90° khi thuật toán đang dò theo trục Y
-  W  → wall.png
+  W  → wall.png / wall1.png … wall5.png  (random mỗi ô, cố định sau khi tạo)
   O  → cost_path.png
   T  → good.png
   G  → goal.png
@@ -23,6 +23,7 @@ Sau khi search xong (done):
 """
 
 import os
+import random
 import pygame
 from typing import Dict, List, Optional, Set, Tuple
 from core.grid import Grid
@@ -56,7 +57,15 @@ class Renderer:
         self.spr_normal      = _load(pic('normal_path.png'),   self._cell)
         self.spr_normal2     = _load(pic('normal_path2.png'),  self._cell)
         self.spr_normal2_rot = pygame.transform.rotate(self.spr_normal2, 90)
-        self.spr_wall        = _load(pic('wall.png'),          self._cell)
+        # Wall variants: wall.png, wall1.png … wall5.png  (6 biến thể)
+        self.spr_walls       = [
+            _load(pic('wall.png'),  self._cell),
+            _load(pic('wall1.png'), self._cell),
+            _load(pic('wall2.png'), self._cell),
+            _load(pic('wall3.png'), self._cell),
+            _load(pic('wall4.png'), self._cell),
+            _load(pic('wall5.png'), self._cell),
+        ]
         self.spr_cost        = _load(pic('cost_path.png'),     self._cell)
         self.spr_good        = _load(pic('good.png'),          self._cell)
         self.spr_goal        = _load(pic('goal.png'),          self._cell)
@@ -84,7 +93,14 @@ class Renderer:
                     self._e_counter[(r, c)] = cnt
                     cnt += 1
 
-        # ── Trạng thái search/shipper ─────────────────────────────────────
+        # Precompute variant wall ngẫu nhiên cho từng ô tường (cố định suốt vòng đời map)
+        self._wall_variant: Dict[Tuple[int,int], int] = {}
+        for r in range(grid.rows):
+            for c in range(grid.cols):
+                if grid.get_node(r, c).cell_type == 'W':
+                    self._wall_variant[(r, c)] = random.randrange(len(self.spr_walls))
+
+
         self._phase         = 'idle'    # 'idle' | 'searching' | 'walking'
         self._explored: Set = set()
         self._frontier: Set = set()
@@ -180,7 +196,8 @@ class Renderer:
     def _base_sprite(self, row: int, col: int, ct: str) -> pygame.Surface:
         """Trả về sprite nền cho ô (row, col) theo loại ô."""
         if ct == 'W':
-            return self.spr_wall
+            variant = self._wall_variant.get((row, col), 0)
+            return self.spr_walls[variant]
         if ct == 'O':
             return self.spr_cost
         if ct == 'T':
