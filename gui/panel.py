@@ -206,25 +206,26 @@ class Panel:
     _PAD     = 16   # outer padding
     _IG      = 6    # inner gap (giữa các item trong cùng section)
     _SG      = 14   # section gap (giữa các section)
-    _LBL_H   = 24   # chiều cao label section
-    _BTN_H   = 40   # nút lớn (RUN/PAUSE/RESET)
-    _ROW_H   = 32   # nút nhỏ (heuristic, speed, beam)
+    _LBL_H   = 30   # chiều cao label section
+    _BTN_H   = 46   # nút lớn (RUN/PAUSE/RESET)
+    _ROW_H   = 38   # nút nhỏ (heuristic, speed, beam)
 
-    def __init__(self, x, y, width, height, base_dir=''):
+    def __init__(self, x, y, width, height, base_dir='', on_sound=None):
         self.x        = x
         self.y        = y
         self.width    = width
         self.height   = height
         self.base_dir = base_dir
         self._t       = 0.0
+        self._on_sound = on_sound  # callable() để phát panel.MP3
 
         pygame.font.init()
-        self.f_section = _game_font(17, bold=True)
-        self.f_algo    = _game_font(24, bold=True)
-        self.f_btn     = _game_font(19, bold=True)
-        self.f_body    = _game_font(19, bold=True)
-        self.f_val     = _game_font(18)
-        self.f_arrow   = _game_font(26, bold=True)
+        self.f_section = _game_font(22, bold=True)
+        self.f_algo    = _game_font(30, bold=True)
+        self.f_btn     = _game_font(24, bold=True)
+        self.f_body    = _game_font(24, bold=True)
+        self.f_val     = _game_font(23)
+        self.f_arrow   = _game_font(32, bold=True)
 
         self.algo_idx                = 0
         self.heuristic_options       = ['manhattan', 'euclidean']
@@ -301,9 +302,9 @@ class Panel:
         # Luôn tạo button (cần cho click-detection), nhưng đặt ở cur hiện tại
         btn_y = cur + LH + IG
         self._btn_manhattan = FlatButton(
-            pygame.Rect(x + P, btn_y, hw, RH), 'Manhattan', BTN_SPEED_UNS, font_size=18)
+            pygame.Rect(x + P, btn_y, hw, RH), 'Manhattan', BTN_SPEED_UNS, font_size=22)
         self._btn_euclidean = FlatButton(
-            pygame.Rect(x + P + hw + 6, btn_y, hw, RH), 'Euclidean', BTN_SPEED_UNS, font_size=18)
+            pygame.Rect(x + P + hw + 6, btn_y, hw, RH), 'Euclidean', BTN_SPEED_UNS, font_size=22)
         if self.needs_heuristic:
             cur += LH + IG + RH + SG
 
@@ -333,18 +334,18 @@ class Panel:
         cur += LH + IG
         third = (bw - 8) // 3
         self.btn_run   = FlatButton(pygame.Rect(x + P, cur, third, BH),
-                                    'RUN', BTN_RUN_C, font_size=19)
+                                    'RUN', BTN_RUN_C, font_size=23)
         self.btn_pause = FlatButton(pygame.Rect(x + P + third + 4, cur, third, BH),
-                                    'PAUSE', BTN_PAUSE_C, font_size=18)
+                                    'PAUSE', BTN_PAUSE_C, font_size=22)
         self.btn_reset = FlatButton(pygame.Rect(x + P + (third + 4) * 2, cur, third, BH),
-                                    'RESET', BTN_RESET_C, font_size=18)
+                                    'RESET', BTN_RESET_C, font_size=22)
         cur += BH + SG
 
         # ── RESULTS ──────────────────────────────────────────────────────
         self._div_res_y  = cur
         cur += LH + IG
         self._stats_top  = cur
-        self._stat_row_h = 26
+        self._stat_row_h = 32
 
     # ── Properties ────────────────────────────────────────────────────────
     @property
@@ -401,19 +402,23 @@ class Panel:
             if event.key == pygame.K_LEFT:
                 self.algo_idx = (self.algo_idx - 1) % len(ALGO_KEYS)
                 self._rebuild_dynamic_layout()
+                if self._on_sound: self._on_sound()
                 return True
             if event.key == pygame.K_RIGHT:
                 self.algo_idx = (self.algo_idx + 1) % len(ALGO_KEYS)
                 self._rebuild_dynamic_layout()
+                if self._on_sound: self._on_sound()
                 return True
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if self._rect_arrow_l.collidepoint(event.pos):
                 self.algo_idx = (self.algo_idx - 1) % len(ALGO_KEYS)
                 self._rebuild_dynamic_layout()
+                if self._on_sound: self._on_sound()
                 return True
             if self._rect_arrow_r.collidepoint(event.pos):
                 self.algo_idx = (self.algo_idx + 1) % len(ALGO_KEYS)
                 self._rebuild_dynamic_layout()
+                if self._on_sound: self._on_sound()
                 return True
         return False
 

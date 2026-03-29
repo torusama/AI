@@ -21,6 +21,7 @@ except ImportError:
     _CV2_AVAILABLE = False
 
 from core.grid import Grid
+from sound_manager import SoundManager, VolumeButton
 from Algorithm.bfs import bfs_steps
 from Algorithm.dfs import dfs_steps
 from Algorithm.UCS import ucs_steps
@@ -313,7 +314,7 @@ def infer_direction(path):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def screen_main_menu(screen: pygame.Surface, clock: pygame.time.Clock,
-                     base_dir: str) -> str:
+                     base_dir: str, sound_mgr: SoundManager) -> str:
     """Returns: 'start' | 'exit'"""
     W, H = screen.get_size()
     pic  = lambda name: os.path.join(base_dir, "picture", name)
@@ -331,33 +332,45 @@ def screen_main_menu(screen: pygame.Surface, clock: pygame.time.Clock,
     rect_start = img_start.get_rect(center=(int(W * 0.574), int(H * 0.57)))
     rect_exit  = img_exit.get_rect(center=(int(W * 0.5958),  int(H * 0.72)))
 
+    # Nút volume góc trái dưới
+    vol_btn = VolumeButton(base_dir, sound_mgr, W, H)
+
+    def draw_all():
+        screen.blit(bg, (0, 0))
+        screen.blit(img_start, rect_start)
+        screen.blit(img_exit,  rect_exit)
+        vol_btn.draw(screen)
+
     # Draw once before fade-in
-    screen.blit(bg, (0, 0))
-    screen.blit(img_start, rect_start)
-    screen.blit(img_exit,  rect_exit)
+    draw_all()
     fade(screen, clock, fade_out=False)
 
     while True:
         clock.tick(FPS)
 
         for event in pygame.event.get():
+            sound_mgr.handle_event(event)
+
             if event.type == pygame.QUIT:
                 return 'exit'
+
+            # Volume button xử lý trước
+            if vol_btn.handle_event(event):
+                continue
+
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if rect_start.collidepoint(event.pos):
-                    screen.blit(bg, (0, 0))
-                    screen.blit(img_start, rect_start)
-                    screen.blit(img_exit,  rect_exit)
+                    sound_mgr.play('click')
+                    draw_all()
                     fade(screen, clock, fade_out=True)
                     return 'start'
                 if rect_exit.collidepoint(event.pos):
-                    screen.blit(bg, (0, 0))
+                    sound_mgr.play('click')
+                    draw_all()
                     fade(screen, clock, fade_out=True)
                     return 'exit'
 
-        screen.blit(bg, (0, 0))
-        screen.blit(img_start, rect_start)
-        screen.blit(img_exit,  rect_exit)
+        draw_all()
         pygame.display.flip()
 
 
@@ -366,7 +379,8 @@ def screen_main_menu(screen: pygame.Surface, clock: pygame.time.Clock,
 # ══════════════════════════════════════════════════════════════════════════════
 
 def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
-                      base_dir: str, map_results: dict) -> str | None:
+                      base_dir: str, map_results: dict,
+                      sound_mgr: SoundManager) -> str | None:
     """Returns: map filepath | 'back' | None (quit)"""
     W, H = screen.get_size()
     pic  = lambda name: os.path.join(base_dir, "picture", name)
@@ -408,12 +422,12 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
 
     # Stats table controls
     _fp = os.path.join(base_dir, 'Jersey15-Regular.ttf')
-    font_btn         = pygame.font.Font(_fp, 24)
-    font_title       = pygame.font.Font(_fp, 28)
-    font_header      = pygame.font.Font(_fp, 16)
-    font_header_algo = pygame.font.Font(_fp, 12)
-    font_body        = pygame.font.Font(_fp, 16)
-    font_hint        = pygame.font.Font(_fp, 15)
+    font_btn         = pygame.font.Font(_fp, 30)
+    font_title       = pygame.font.Font(_fp, 34)
+    font_header      = pygame.font.Font(_fp, 20)
+    font_header_algo = pygame.font.Font(_fp, 16)
+    font_body        = pygame.font.Font(_fp, 20)
+    font_hint        = pygame.font.Font(_fp, 19)
 
     rect_stats = pygame.Rect(W - 212, H - 70, 180, 44)
     show_stats = False
@@ -477,7 +491,7 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
         table_x = box_x + 20
         table_y = box_y + 82
         table_w = box_w - 40
-        row_h = 34
+        row_h = 40
 
         cols = [
             ('algorithm', 'Algorithm', 0.20),
@@ -576,6 +590,7 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
         clock.tick(FPS)
 
         for event in pygame.event.get():
+            sound_mgr.handle_event(event)
             if event.type == pygame.QUIT:
                 video.release()
                 return None
@@ -583,9 +598,11 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
                 if event.key == pygame.K_LEFT:
                     stats_map_idx = (stats_map_idx - 1) % len(MAP_LIST)
                     stats_scroll = 0
+                    sound_mgr.play('panel')
                 elif event.key == pygame.K_RIGHT:
                     stats_map_idx = (stats_map_idx + 1) % len(MAP_LIST)
                     stats_scroll = 0
+                    sound_mgr.play('panel')
                 elif event.key == pygame.K_UP:
                     stats_scroll = max(0, stats_scroll - 1)
                 elif event.key == pygame.K_DOWN:
@@ -615,9 +632,11 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
                     elif rect_prev.collidepoint(event.pos):
                         stats_map_idx = (stats_map_idx - 1) % len(MAP_LIST)
                         stats_scroll = 0
+                        sound_mgr.play('panel')
                     elif rect_next.collidepoint(event.pos):
                         stats_map_idx = (stats_map_idx + 1) % len(MAP_LIST)
                         stats_scroll = 0
+                        sound_mgr.play('panel')
                     elif not rect_popup.collidepoint(event.pos):
                         show_stats = False
                     continue  # block tất cả click khác khi overlay mở
@@ -630,17 +649,20 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
                         break
 
                 if map_clicked is not None:
+                    sound_mgr.play('click')
                     draw_scene()
                     fade(screen, clock, fade_out=True)
                     video.release()
                     return os.path.join(base_dir, MAP_LIST[map_clicked][1])
 
                 if rect_stats.collidepoint(event.pos):
+                    sound_mgr.play('click')
                     show_stats = True
                     stats_scroll = 0
                     continue
 
                 if rect_back.collidepoint(event.pos):
+                    sound_mgr.play('click')
                     draw_scene()
                     fade(screen, clock, fade_out=True)
                     video.release()
@@ -661,7 +683,8 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
 # ══════════════════════════════════════════════════════════════════════════════
 
 def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
-                base_dir: str, map_path: str, map_results: dict) -> str:
+                base_dir: str, map_path: str, map_results: dict,
+                sound_mgr: SoundManager) -> str:
     """
     Runs the pathfinding game.
     Returns: 'choose_map' | 'exit'
@@ -676,7 +699,8 @@ def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
     pygame.display.set_caption('Shipper AI – Pathfinding')
 
     renderer = Renderer(grid, offset_x=0, offset_y=0, base_dir=base_dir)
-    panel    = Panel(x=gw, y=0, width=PANEL_W, height=win_h, base_dir=base_dir)
+    panel    = Panel(x=gw, y=0, width=PANEL_W, height=win_h, base_dir=base_dir,
+                     on_sound=lambda: sound_mgr.play('panel'))
 
     # Draw first frame before fade-in
     screen.fill(BACKGROUND)
@@ -698,9 +722,9 @@ def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
     popup_rect = pygame.Rect(0, 0, 0, 0)
     popup_ok_rect = pygame.Rect(0, 0, 0, 0)
 
-    popup_title_font = pygame.font.SysFont('Arial Black', 28, bold=True)
-    popup_body_font = pygame.font.SysFont('Verdana', 18, bold=True)
-    popup_btn_font = pygame.font.SysFont('Arial Black', 20, bold=True)
+    popup_title_font = pygame.font.SysFont('Arial Black', 34, bold=True)
+    popup_body_font = pygame.font.SysFont('Verdana', 22, bold=True)
+    popup_btn_font = pygame.font.SysFont('Arial Black', 24, bold=True)
 
     def hide_popup():
         nonlocal popup_message
@@ -716,36 +740,77 @@ def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
             return
 
         overlay = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
-        overlay.fill((0, 20, 50, 150))
+        overlay.fill((0, 10, 30, 160))
         screen.blit(overlay, (0, 0))
 
-        box_w = min(520, screen.get_width() - 80)
-        box_h = 220
+        box_w = min(620, screen.get_width() - 80)
+        box_h = 280
         popup_rect = pygame.Rect(
             (screen.get_width() - box_w) // 2,
             (screen.get_height() - box_h) // 2,
             box_w,
             box_h,
         )
-        popup_ok_rect = pygame.Rect(popup_rect.centerx - 70, popup_rect.bottom - 60, 140, 40)
+        popup_ok_rect = pygame.Rect(popup_rect.centerx - 80, popup_rect.bottom - 72, 160, 48)
 
-        pygame.draw.rect(screen, (0, 116, 188), popup_rect, border_radius=14)
-        pygame.draw.rect(screen, (255, 255, 255), popup_rect, 3, border_radius=14)
+        # ── Khung chính — xanh neon sáng ─────────────────────────────────
+        # Gradient: vẽ từ trên (sáng) xuống dưới (tối hơn chút)
+        for row in range(box_h):
+            t = row / box_h
+            r_c = int(0   + 0   * t)
+            g_c = int(230 - 30  * t)
+            b_c = int(255 - 20  * t)
+            pygame.draw.line(screen, (r_c, g_c, b_c),
+                             (popup_rect.x, popup_rect.y + row),
+                             (popup_rect.right, popup_rect.y + row))
+        # Clip gradient vào border-radius bằng cách vẽ mask
+        clip_surf = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
+        pygame.draw.rect(clip_surf, (255, 255, 255, 255),
+                         clip_surf.get_rect(), border_radius=18)
+        # Lấy pixel gradient đã vẽ rồi mask lại
+        grad_surf = screen.subsurface(popup_rect).copy()
+        grad_surf.blit(clip_surf, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
 
+        # Vẽ lại nền tối trước rồi blit gradient đã clip
+        pygame.draw.rect(screen, (0, 200, 240), popup_rect, border_radius=18)
+        screen.blit(grad_surf, popup_rect.topleft)
+
+        # ── Shimmer trên cùng ─────────────────────────────────────────────
+        shim_h = box_h // 3
+        shim = pygame.Surface((box_w, shim_h), pygame.SRCALPHA)
+        for row in range(shim_h):
+            a = int(60 * (1 - row / shim_h) ** 1.5)
+            pygame.draw.line(shim, (255, 255, 255, a), (0, row), (box_w - 1, row))
+        mask = pygame.Surface((box_w, shim_h), pygame.SRCALPHA)
+        pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(), border_radius=18)
+        shim.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+        screen.blit(shim, popup_rect.topleft)
+
+        # ── Title ─────────────────────────────────────────────────────────
         title = popup_title_font.render('Notification', True, (255, 255, 255))
-        screen.blit(title, title.get_rect(center=(popup_rect.centerx, popup_rect.y + 38)))
+        # Đổ bóng chữ
+        title_shadow = popup_title_font.render('Notification', True, (0, 80, 120))
+        screen.blit(title_shadow, title_shadow.get_rect(center=(popup_rect.centerx + 2, popup_rect.y + 50 + 2)))
+        screen.blit(title, title.get_rect(center=(popup_rect.centerx, popup_rect.y + 50)))
 
+        # ── Body text ─────────────────────────────────────────────────────
         lines = popup_message.split('\n')
-        text_y = popup_rect.y + 84
+        text_y = popup_rect.y + 108
         for line in lines:
-            body = popup_body_font.render(line, True, (235, 245, 255))
+            body = popup_body_font.render(line, True, (10, 30, 80))
             screen.blit(body, body.get_rect(center=(popup_rect.centerx, text_y)))
-            text_y += 28
+            text_y += 34
 
+        # ── OK button ─────────────────────────────────────────────────────
         hovered = popup_ok_rect.collidepoint(pygame.mouse.get_pos())
-        btn_color = (0, 95, 160) if hovered else (0, 125, 205)
-        pygame.draw.rect(screen, btn_color, popup_ok_rect, border_radius=10)
-        pygame.draw.rect(screen, (255, 255, 255), popup_ok_rect, 2, border_radius=10)
+        btn_color = (0, 80, 160) if hovered else (0, 50, 130)
+        pygame.draw.rect(screen, btn_color, popup_ok_rect, border_radius=12)
+        # Shimmer trên nút
+        btn_shim = pygame.Surface((popup_ok_rect.width, popup_ok_rect.height // 2), pygame.SRCALPHA)
+        for row in range(btn_shim.get_height()):
+            a = int(50 * (1 - row / btn_shim.get_height()))
+            pygame.draw.line(btn_shim, (255, 255, 255, a), (0, row), (btn_shim.get_width() - 1, row))
+        screen.blit(btn_shim, popup_ok_rect.topleft)
         ok_txt = popup_btn_font.render('OK', True, (255, 255, 255))
         screen.blit(ok_txt, ok_txt.get_rect(center=popup_ok_rect.center))
 
@@ -819,6 +884,7 @@ def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
         mouse_pos = pygame.mouse.get_pos()
 
         for event in pygame.event.get():
+            sound_mgr.handle_event(event)
             if event.type == pygame.QUIT:
                 return 'exit'
 
@@ -835,15 +901,19 @@ def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
                 reset()
                 apply_cached_stats_to_panel()
             if panel.handle_heuristic_click(event):
+                sound_mgr.play('panel')
                 reset()
                 apply_cached_stats_to_panel()
             if panel.handle_beam_width_click(event):
+                sound_mgr.play('panel')
                 reset()
                 apply_cached_stats_to_panel()
-            panel.handle_speed_click(event)
+            if panel.handle_speed_click(event):
+                sound_mgr.play('panel')
 
             # ── Back → Choose Map (with fade) ─────────────────────────────
             if panel.is_back_map_clicked(event):
+                sound_mgr.play('click')
                 reset()
                 screen.fill(BACKGROUND)
                 renderer.draw(screen)
@@ -856,17 +926,21 @@ def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
 
             if panel.btn_run.is_clicked(event):
                 if phase == 'idle':
+                    sound_mgr.play('panel')
                     start_search()
                 elif paused:
+                    sound_mgr.play('panel')
                     paused    = False
                     animating = True
 
             if panel.btn_pause.is_clicked(event):
                 if animating:
+                    sound_mgr.play('panel')
                     paused    = True
                     animating = False
 
             if panel.btn_reset.is_clicked(event):
+                sound_mgr.play('panel')
                 clear_selected_cached_result()
                 reset()
                 apply_cached_stats_to_panel()
@@ -915,6 +989,7 @@ def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
                         else:
                             phase = 'idle'
                             if panel.selected_algo == 'Beam Search':
+                                sound_mgr.play('goal')
                                 show_popup(
                                     'Beam Search could not find a path.\n'
                                     'Try a larger beam width or another heuristic.'
@@ -928,6 +1003,7 @@ def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
                 walk_timer    = now
                 still_walking = renderer.advance_shipper()
                 if not still_walking:
+                    sound_mgr.play('goal')
                     animating = False
                     phase     = 'done'
 
@@ -954,17 +1030,20 @@ def run_app(base_dir: str):
     clock  = pygame.time.Clock()
     map_results = {}
 
+    # Khởi tạo sound manager — nhạc nền tự động phát
+    sound_mgr = SoundManager(base_dir)
+
     current_screen = 'main_menu'
 
     while True:
         if current_screen == 'main_menu':
-            result = screen_main_menu(screen, clock, base_dir)
+            result = screen_main_menu(screen, clock, base_dir, sound_mgr)
             if result == 'exit':
                 break
             current_screen = 'choose_map'
 
         elif current_screen == 'choose_map':
-            result = screen_choose_map(screen, clock, base_dir, map_results)
+            result = screen_choose_map(screen, clock, base_dir, map_results, sound_mgr)
             if result is None:
                 break
             if result == 'back':
@@ -974,7 +1053,7 @@ def run_app(base_dir: str):
                 current_screen = 'game'
 
         elif current_screen == 'game':
-            result = screen_game(screen, clock, base_dir, map_path, map_results)
+            result = screen_game(screen, clock, base_dir, map_path, map_results, sound_mgr)
             if result == 'exit':
                 break
             if result == 'choose_map':
