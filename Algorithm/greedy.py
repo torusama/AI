@@ -15,9 +15,26 @@ def _reconstruct_path(parent, goal):
     return path
 
 
+def _make_state(pos, collected, all_goods):
+    """Normalize state: luôn collect goods tại vị trí hiện tại."""
+    if pos in all_goods:
+        collected = collected | frozenset({pos})
+    return (pos, collected)
+
+
+def _state_heuristic(state, goal, all_goods, heuristic_fn):
+    pos, collected_goods = state
+    remaining_goods = all_goods - collected_goods
+    if remaining_goods:
+        nearest_goods = min(remaining_goods, key=lambda g: heuristic_fn(pos, g))
+        return heuristic_fn(pos, nearest_goods) + heuristic_fn(nearest_goods, goal)
+    return heuristic_fn(pos, goal)
+
+
 def greedy_steps(grid: Grid, heuristic_name='manhattan'):
     start = grid.start
     goal = grid.goal
+    all_goods = frozenset(grid.goods)
 
     if not start or not goal:
         yield {
@@ -39,8 +56,10 @@ def greedy_steps(grid: Grid, heuristic_name='manhattan'):
 
     t0 = time.time()
 
-    # FIX 1: Handle start == goal early
-    if start == goal:
+    # FIX: Dùng _make_state để normalize — tránh duplicate state tại goods position
+    start_state = _make_state(start, frozenset(), all_goods)
+
+    if start == goal and start_state[1] == all_goods:
         yield {
             "explored": frozenset(),
             "frontier": frozenset({start}),
@@ -53,19 +72,17 @@ def greedy_steps(grid: Grid, heuristic_name='manhattan'):
         }
         return
 
-    # FIX 2: Add tie-breaker counter to avoid TypeError on heap comparison
     counter = 0
-    open_heap = [(heuristic_fn(start, goal), counter, start)]
+    open_heap = [(_state_heuristic(start_state, goal, all_goods, heuristic_fn), counter, start_state)]
 
-    visited = {start}
-    parent = {start: None}
-    g_score = {start: 0}
+    visited = {start_state}
+    parent = {start_state: None}
+    g_score = {start_state: 0}
     explored = set()
-
-    # FIX 3: Maintain frontier set explicitly instead of scanning heap O(n)
-    frontier = {start}
+    frontier_count = {start: 1}
 
     found = False
+    goal_state = None
 
     yield {
         "explored": frozenset(),
@@ -79,35 +96,49 @@ def greedy_steps(grid: Grid, heuristic_name='manhattan'):
     }
 
     while open_heap:
-        _, _, curr = heapq.heappop(open_heap)
+        _, _, curr_state = heapq.heappop(open_heap)
+        curr, collected_goods = curr_state
 
-        if curr in explored:
+        if curr_state in explored:
+            frontier_count[curr] = frontier_count.get(curr, 1) - 1
+            if frontier_count[curr] <= 0:
+                frontier_count.pop(curr, None)
             continue
 
-        explored.add(curr)
-        frontier.discard(curr)
+        explored.add(curr_state)
+        frontier_count[curr] = frontier_count.get(curr, 1) - 1
+        if frontier_count[curr] <= 0:
+            frontier_count.pop(curr, None)
 
-        if curr == goal:
+        if curr == goal and collected_goods == all_goods:
             found = True
+            goal_state = curr_state
             break
 
         row, col = curr
         for neighbor, _ in grid.get_neighbors(row, col):
             npos = neighbor.position
-            if npos in visited:
+
+            # FIX: Dùng _make_state — collect goods ngay khi tạo state mới
+            next_state = _make_state(npos, collected_goods, all_goods)
+
+            if next_state in visited:
                 continue
 
-            visited.add(npos)
-            parent[npos] = curr
-            g_score[npos] = g_score[curr] + neighbor.cost
+            visited.add(next_state)
+            parent[next_state] = curr_state
+            g_score[next_state] = g_score[curr_state] + neighbor.cost
 
             counter += 1
-            heapq.heappush(open_heap, (heuristic_fn(npos, goal), counter, npos))
-            frontier.add(npos)
+            heapq.heappush(
+                open_heap,
+                (_state_heuristic(next_state, goal, all_goods, heuristic_fn), counter, next_state),
+            )
+            frontier_count[npos] = frontier_count.get(npos, 0) + 1
 
         yield {
-            "explored": frozenset(explored),
-            "frontier": frozenset(frontier),
+            "explored": frozenset(state[0] for state in explored),
+            "frontier": frozenset(frontier_count.keys()),
             "cell_branch": {},
             "path": [],
             "found": False,
@@ -117,16 +148,16 @@ def greedy_steps(grid: Grid, heuristic_name='manhattan'):
         }
 
     time_ms = (time.time() - t0) * 1000
-    path = _reconstruct_path(parent, goal) if found else []
+    path_states = _reconstruct_path(parent, goal_state) if found and goal_state is not None else []
+    path = [state[0] for state in path_states]
 
     yield {
-        "explored": frozenset(explored),
-        "frontier": frozenset(frontier),
+        "explored": frozenset(state[0] for state in explored),
+        "frontier": frozenset(frontier_count.keys()),
         "cell_branch": {},
         "path": path,
         "found": found,
         "done": True,
-        # FIX 4: Safe access with .get() to avoid KeyError
-        "cost": g_score.get(goal, 0) if found else 0,
+        "cost": g_score.get(goal_state, 0) if found else 0,
         "time_ms": time_ms,
     }
