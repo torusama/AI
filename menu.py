@@ -105,7 +105,27 @@ def _get_map_results_rows(map_results: dict, map_path: str) -> list:
 
     ordered_rows = []
     for algo in ALGO_ORDER:
-        if algo in HEURISTIC_ROW_ALGOS:
+        if algo == 'Beam Search':
+            beam_rows = []
+            for row_key, row in merged.items():
+                if row_key.startswith('Beam Search::') and row_key != 'Beam Search::_':
+                    beam_rows.append(dict(row))
+
+            def _beam_sort_key(row: dict):
+                bw = row.get('beam_width', '_')
+                try:
+                    bw_num = int(bw)
+                except (TypeError, ValueError):
+                    bw_num = 10**9
+                return (bw_num, str(row.get('heuristic', '_')))
+
+            beam_rows.sort(key=_beam_sort_key)
+            if beam_rows:
+                ordered_rows.extend(beam_rows)
+            else:
+                ordered_rows.append(merged[f'{algo}::_'])
+
+        elif algo in HEURISTIC_ROW_ALGOS:
             algo_rows = []
             for h in HEURISTIC_ORDER:
                 key = f'{algo}::{h}'
@@ -122,7 +142,7 @@ def _get_map_results_rows(map_results: dict, map_path: str) -> list:
 
 def _update_map_results(map_results: dict, map_path: str, algorithm: str,
                         found: bool, cost, path_length: int, nodes_found: int, time_ms: float,
-                        selected_speed: str, selected_heuristic: str):
+                        selected_speed: str, selected_heuristic: str, selected_beam_width: int | None = None):
     if map_path not in map_results:
         map_results[map_path] = _empty_map_results()
 
@@ -130,7 +150,14 @@ def _update_map_results(map_results: dict, map_path: str, algorithm: str,
     nodes_found = int(nodes_found or 0)
     speed = str(selected_speed) if selected_speed else '_'
     heuristic = selected_heuristic if algorithm in HEURISTIC_ROW_ALGOS else '_'
-    row_key = f'{algorithm}::{heuristic}' if algorithm in HEURISTIC_ROW_ALGOS else f'{algorithm}::none'
+    if algorithm == 'Beam Search':
+        beam_width = selected_beam_width if selected_beam_width is not None else '_'
+        row_key = f'{algorithm}::{heuristic}::k={beam_width}'
+        algo_label = f'Beam Search (k={beam_width})'
+    else:
+        beam_width = '_'
+        row_key = f'{algorithm}::{heuristic}' if algorithm in HEURISTIC_ROW_ALGOS else f'{algorithm}::none'
+        algo_label = algorithm
 
     # Remove placeholder row when first heuristic-specific result is created.
     if algorithm in HEURISTIC_ROW_ALGOS:
@@ -138,8 +165,9 @@ def _update_map_results(map_results: dict, map_path: str, algorithm: str,
 
     map_results[map_path][row_key] = {
         'row_key': row_key,
-        'algorithm': algorithm,
+        'algorithm': algo_label,
         'heuristic': heuristic,
+        'beam_width': str(beam_width),
         'found': 'Yes' if found else 'No',
         'cost': str(cost),
         'path_length': str(path_length),
@@ -149,16 +177,20 @@ def _update_map_results(map_results: dict, map_path: str, algorithm: str,
     }
 
 
-def _result_row_key(algorithm: str, selected_heuristic: str) -> str:
+def _result_row_key(algorithm: str, selected_heuristic: str,
+                    selected_beam_width: int | None = None) -> str:
+    if algorithm == 'Beam Search':
+        beam_width = selected_beam_width if selected_beam_width is not None else '_'
+        return f'{algorithm}::{selected_heuristic}::k={beam_width}'
     if algorithm in HEURISTIC_ROW_ALGOS:
         return f'{algorithm}::{selected_heuristic}'
     return f'{algorithm}::none'
 
 
 def _get_cached_result(map_results: dict, map_path: str, algorithm: str,
-                       selected_heuristic: str) -> dict | None:
+                       selected_heuristic: str, selected_beam_width: int | None = None) -> dict | None:
     map_rows = map_results.get(map_path, {})
-    row = map_rows.get(_result_row_key(algorithm, selected_heuristic))
+    row = map_rows.get(_result_row_key(algorithm, selected_heuristic, selected_beam_width))
     if not row:
         return None
     if row.get('cost', '_') == '_':
@@ -167,11 +199,11 @@ def _get_cached_result(map_results: dict, map_path: str, algorithm: str,
 
 
 def _clear_cached_result(map_results: dict, map_path: str, algorithm: str,
-                         selected_heuristic: str):
+                         selected_heuristic: str, selected_beam_width: int | None = None):
     if map_path not in map_results:
         return
 
-    row_key = _result_row_key(algorithm, selected_heuristic)
+    row_key = _result_row_key(algorithm, selected_heuristic, selected_beam_width)
     if algorithm in HEURISTIC_ROW_ALGOS:
         map_results[map_path].pop(row_key, None)
         has_any = any(
@@ -386,11 +418,14 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
     rect_stats = pygame.Rect(W - 212, H - 70, 180, 44)
     show_stats = False
     stats_map_idx = 0
+    stats_scroll = 0
+    stats_max_scroll = 0
 
     rect_prev = pygame.Rect(0, 0, 0, 0)
     rect_next = pygame.Rect(0, 0, 0, 0)
     rect_close = pygame.Rect(0, 0, 0, 0)
     rect_popup = pygame.Rect(0, 0, 0, 0)
+    rect_table_body = pygame.Rect(0, 0, 0, 0)
 
     def draw_bg():
         if video.available:
@@ -409,6 +444,7 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
 
     def draw_stats_overlay():
         nonlocal rect_prev, rect_next, rect_close, rect_popup
+        nonlocal rect_table_body, stats_scroll, stats_max_scroll
 
         overlay = pygame.Surface((W, H), pygame.SRCALPHA)
         overlay.fill((0, 20, 50, 165))
@@ -479,9 +515,19 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
         # Body rows: each row is one algorithm variant (algo + heuristic)
         y = table_y + row_h
         max_rows = max(1, (box.bottom - 56 - y) // row_h)
-        for row_idx, row_data in enumerate(table_rows[:max_rows]):
+        stats_max_scroll = max(0, len(table_rows) - max_rows)
+        if stats_scroll > stats_max_scroll:
+            stats_scroll = stats_max_scroll
+        if stats_scroll < 0:
+            stats_scroll = 0
+
+        visible_rows = table_rows[stats_scroll:stats_scroll + max_rows]
+        rect_table_body = pygame.Rect(table_x, y, table_w, max_rows * row_h)
+
+        for row_idx, row_data in enumerate(visible_rows):
+            absolute_idx = stats_scroll + row_idx
             row_rect = pygame.Rect(table_x, y, table_w, row_h)
-            pygame.draw.rect(screen, (0, 126, 198) if row_idx % 2 == 0 else (0, 118, 190), row_rect)
+            pygame.draw.rect(screen, (0, 126, 198) if absolute_idx % 2 == 0 else (0, 118, 190), row_rect)
             pygame.draw.rect(screen, (255, 255, 255), row_rect, 1)
 
             for idx, (key, _, _) in enumerate(cols):
@@ -495,6 +541,17 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
                     screen.blit(txt, txt.get_rect(center=((x1 + x2) // 2, y + row_h // 2)))
 
             y += row_h
+
+        if stats_max_scroll > 0:
+            track_w = 8
+            track_h = rect_table_body.height
+            track_x = rect_table_body.right - track_w - 2
+            track_y = rect_table_body.y
+            pygame.draw.rect(screen, (0, 92, 150), (track_x, track_y, track_w, track_h), border_radius=4)
+
+            thumb_h = max(24, int(track_h * (max_rows / max(1, len(table_rows)))))
+            thumb_y = track_y + int((track_h - thumb_h) * (stats_scroll / max(1, stats_max_scroll)))
+            pygame.draw.rect(screen, (180, 230, 255), (track_x, thumb_y, track_w, thumb_h), border_radius=4)
 
         rect_prev = pygame.Rect(box_x + 20, box.bottom - 46, 50, 30)
         rect_next = pygame.Rect(box.right - 70, box.bottom - 46, 50, 30)
@@ -525,10 +582,29 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
             if event.type == pygame.KEYDOWN and show_stats:
                 if event.key == pygame.K_LEFT:
                     stats_map_idx = (stats_map_idx - 1) % len(MAP_LIST)
+                    stats_scroll = 0
                 elif event.key == pygame.K_RIGHT:
                     stats_map_idx = (stats_map_idx + 1) % len(MAP_LIST)
+                    stats_scroll = 0
+                elif event.key == pygame.K_UP:
+                    stats_scroll = max(0, stats_scroll - 1)
+                elif event.key == pygame.K_DOWN:
+                    stats_scroll = min(stats_max_scroll, stats_scroll + 1)
+                elif event.key == pygame.K_PAGEUP:
+                    stats_scroll = max(0, stats_scroll - 5)
+                elif event.key == pygame.K_PAGEDOWN:
+                    stats_scroll = min(stats_max_scroll, stats_scroll + 5)
+                elif event.key == pygame.K_HOME:
+                    stats_scroll = 0
+                elif event.key == pygame.K_END:
+                    stats_scroll = stats_max_scroll
                 elif event.key in (pygame.K_ESCAPE, pygame.K_RETURN):
                     show_stats = False
+                continue
+
+            if event.type == pygame.MOUSEWHEEL and show_stats:
+                if rect_popup.collidepoint(pygame.mouse.get_pos()):
+                    stats_scroll = max(0, min(stats_max_scroll, stats_scroll - event.y))
                 continue
 
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -538,8 +614,10 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
                         show_stats = False
                     elif rect_prev.collidepoint(event.pos):
                         stats_map_idx = (stats_map_idx - 1) % len(MAP_LIST)
+                        stats_scroll = 0
                     elif rect_next.collidepoint(event.pos):
                         stats_map_idx = (stats_map_idx + 1) % len(MAP_LIST)
+                        stats_scroll = 0
                     elif not rect_popup.collidepoint(event.pos):
                         show_stats = False
                     continue  # block tất cả click khác khi overlay mở
@@ -559,6 +637,7 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
 
                 if rect_stats.collidepoint(event.pos):
                     show_stats = True
+                    stats_scroll = 0
                     continue
 
                 if rect_back.collidepoint(event.pos):
@@ -566,6 +645,12 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
                     fade(screen, clock, fade_out=True)
                     video.release()
                     return 'back'
+
+            if event.type == pygame.MOUSEBUTTONDOWN and show_stats and event.button in (4, 5):
+                if rect_table_body.collidepoint(event.pos):
+                    delta = -1 if event.button == 4 else 1
+                    stats_scroll = max(0, min(stats_max_scroll, stats_scroll + delta))
+                continue
 
         draw_scene()
         pygame.display.flip()
@@ -670,6 +755,7 @@ def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
             map_path=map_path,
             algorithm=panel.selected_algo,
             selected_heuristic=panel.selected_heuristic,
+            selected_beam_width=panel.selected_beam_width,
         )
         if not cached:
             panel.reset_stats()
@@ -689,6 +775,7 @@ def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
             map_path=map_path,
             algorithm=panel.selected_algo,
             selected_heuristic=panel.selected_heuristic,
+            selected_beam_width=panel.selected_beam_width,
         )
 
     def reset():
@@ -818,6 +905,7 @@ def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
                             time_ms=current_step.get('time_ms', 0),
                             selected_speed=run_speed_label,
                             selected_heuristic=panel.selected_heuristic,
+                            selected_beam_width=panel.selected_beam_width,
                         )
                         if found and saved_path:
                             phase      = 'walking'
