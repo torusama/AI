@@ -32,7 +32,7 @@ SPEED_LEVELS = [
 ]
 ALGO_KEYS       = ['BFS', 'DFS', 'UCS', 'A*', 'Greedy Search', 'Beam Search', 'Bidirectional Search', 'IDA*']
 HEURISTIC_ALGOS = {'A*', 'Greedy Search', 'Beam Search', 'IDA*'}
-BEAM_WIDTH_OPTIONS = [1, 2, 3, 5]
+BEAM_WIDTH_OPTIONS = [2, 5, 8, 10]
 
 
 # ── Font helper ────────────────────────────────────────────────────────────────
@@ -229,7 +229,7 @@ class Panel:
         self.algo_idx                = 0
         self.heuristic_options       = ['manhattan', 'euclidean']
         self.selected_heuristic_idx  = 0
-        self.selected_beam_width_idx = 1
+        self.selected_beam_width_idx = 2
         self.speed_idx               = 1
         self.stats = {
             'Algorithm':   '--',
