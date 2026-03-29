@@ -107,6 +107,7 @@ class Renderer:
         self._final_path: List = []
         self._visited_path: Set = set()   # ô shipper đã đi qua
         self._shipper_pos: Optional[Tuple[int,int]] = None
+        self._shipper_step = 0
         self._direction   = 'x'          # hướng dò hiện tại: 'x' hoặc 'y'
 
     # ── Public API ────────────────────────────────────────────────────────
@@ -124,6 +125,7 @@ class Renderer:
         self._phase        = 'walking'
         self._final_path   = list(path)
         self._visited_path = set()
+        self._shipper_step = 0
         self._shipper_pos  = path[0] if path else None
         self._explored     = set()
         self._frontier     = set()
@@ -133,17 +135,14 @@ class Renderer:
         Di chuyển shipper thêm 1 bước trên path.
         Trả về True nếu còn bước, False nếu đã tới đích.
         """
-        if not self._final_path:
-            return False
-        if self._shipper_pos in self._final_path:
-            idx = self._final_path.index(self._shipper_pos)
-        else:
+        if not self._final_path or self._shipper_pos is None:
             return False
 
         self._visited_path.add(self._shipper_pos)
 
-        if idx + 1 < len(self._final_path):
-            self._shipper_pos = self._final_path[idx + 1]
+        if self._shipper_step + 1 < len(self._final_path):
+            self._shipper_step += 1
+            self._shipper_pos = self._final_path[self._shipper_step]
             return True
         return False
 
@@ -154,6 +153,7 @@ class Renderer:
         self._final_path   = []
         self._visited_path = set()
         self._shipper_pos  = None
+        self._shipper_step = 0
 
     # ── Draw ──────────────────────────────────────────────────────────────
 

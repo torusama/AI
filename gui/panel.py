@@ -32,17 +32,22 @@ SPEED_LEVELS = [
 ]
 ALGO_KEYS       = ['BFS', 'DFS', 'UCS', 'A*', 'Greedy Search', 'Beam Search', 'Bidirectional Search', 'IDA*']
 HEURISTIC_ALGOS = {'A*', 'Greedy Search', 'Beam Search', 'IDA*'}
-BEAM_WIDTH_OPTIONS = [1, 2, 3, 5]
+BEAM_WIDTH_OPTIONS = [2, 5, 8, 10]
 
 
 # ── Font helper ────────────────────────────────────────────────────────────────
+_JERSEY_FONT_PATH: str = ''   # set bởi set_font_path() trước khi dùng
+
+def set_font_path(path: str):
+    """Gọi 1 lần từ menu.py sau khi biết base_dir."""
+    global _JERSEY_FONT_PATH
+    _JERSEY_FONT_PATH = path
+
 def _game_font(size: int, bold: bool = False) -> pygame.font.Font:
-    for name in ('Bangers', 'Lilita One', 'Fredoka One', 'Boogaloo',
-                 'Arial Black', 'Impact', 'Rajdhani', 'Exo 2', 'Verdana'):
+    """Luôn dùng Jersey15-Regular.ttf nếu có, fallback SysFont."""
+    if _JERSEY_FONT_PATH and os.path.exists(_JERSEY_FONT_PATH):
         try:
-            f = pygame.font.SysFont(name, size, bold=bold)
-            if f:
-                return f
+            return pygame.font.Font(_JERSEY_FONT_PATH, size)
         except Exception:
             pass
     return pygame.font.SysFont(None, size, bold=bold)
@@ -224,7 +229,7 @@ class Panel:
         self.algo_idx                = 0
         self.heuristic_options       = ['manhattan', 'euclidean']
         self.selected_heuristic_idx  = 0
-        self.selected_beam_width_idx = 1
+        self.selected_beam_width_idx = 2
         self.speed_idx               = 1
         self.stats = {
             'Algorithm':   '--',
