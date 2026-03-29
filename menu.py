@@ -78,6 +78,7 @@ def _empty_algo_result(algo_name: str, heuristic: str = '_') -> dict:
         'row_key': f'{algo_name}::{heuristic}',
         'algorithm': algo_name,
         'heuristic': heuristic,
+        'found': '_',
         'cost': '_',
         'path_length': '_',
         'nodes_found': '_',
@@ -120,7 +121,7 @@ def _get_map_results_rows(map_results: dict, map_path: str) -> list:
 
 
 def _update_map_results(map_results: dict, map_path: str, algorithm: str,
-                        cost, path_length: int, nodes_found: int, time_ms: float,
+                        found: bool, cost, path_length: int, nodes_found: int, time_ms: float,
                         selected_speed: str, selected_heuristic: str):
     if map_path not in map_results:
         map_results[map_path] = _empty_map_results()
@@ -139,6 +140,7 @@ def _update_map_results(map_results: dict, map_path: str, algorithm: str,
         'row_key': row_key,
         'algorithm': algorithm,
         'heuristic': heuristic,
+        'found': 'Yes' if found else 'No',
         'cost': str(cost),
         'path_length': str(path_length),
         'nodes_found': str(nodes_found),
@@ -442,13 +444,14 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
         row_h = 34
 
         cols = [
-            ('algorithm', 'Algorithm', 0.22),
-            ('heuristic', 'Heuristic', 0.14),
+            ('algorithm', 'Algorithm', 0.20),
             ('cost', 'Cost', 0.09),
-            ('path_length', 'Path', 0.10),
-            ('nodes_found', 'Nodes', 0.14),
+            ('path_length', 'Path', 0.09),
+            ('nodes_found', 'Nodes', 0.13),
             ('speed', 'Speed', 0.13),
-            ('time', 'Time', 0.18),
+            ('time', 'Time', 0.15),
+            ('heuristic', 'Heuristic', 0.12),
+            ('found', 'Found', 0.09),
         ]
 
         edges = [table_x]
@@ -466,8 +469,9 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
         for idx, (_, label, _) in enumerate(cols):
             x1 = edges[idx]
             x2 = edges[idx + 1]
+            key = cols[idx][0]
             txt = font_header_algo.render(label, True, (230, 247, 255))
-            if idx <= 1:
+            if key in ('algorithm', 'heuristic'):
                 screen.blit(txt, (x1 + 6, table_y + (row_h - txt.get_height()) // 2))
             else:
                 screen.blit(txt, txt.get_rect(center=((x1 + x2) // 2, table_y + row_h // 2)))
@@ -485,7 +489,7 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
                 x2 = edges[idx + 1]
                 val = str(row_data.get(key, '_'))
                 txt = font_body.render(val, True, (255, 255, 255))
-                if idx <= 1:
+                if key in ('algorithm', 'heuristic'):
                     screen.blit(txt, (x1 + 6, y + (row_h - txt.get_height()) // 2))
                 else:
                     screen.blit(txt, txt.get_rect(center=((x1 + x2) // 2, y + row_h // 2)))
@@ -807,6 +811,7 @@ def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
                             map_results=map_results,
                             map_path=map_path,
                             algorithm=panel.selected_algo,
+                            found=found,
                             cost=current_step.get('cost', 0),
                             path_length=len(saved_path),
                             nodes_found=len(current_step.get('explored', set())),
