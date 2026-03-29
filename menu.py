@@ -570,6 +570,60 @@ def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
     saved_path   = []
     walk_timer   = 0
     run_speed_label = '_'
+    popup_message = ''
+    popup_rect = pygame.Rect(0, 0, 0, 0)
+    popup_ok_rect = pygame.Rect(0, 0, 0, 0)
+
+    popup_title_font = pygame.font.SysFont('Arial Black', 28, bold=True)
+    popup_body_font = pygame.font.SysFont('Verdana', 18, bold=True)
+    popup_btn_font = pygame.font.SysFont('Arial Black', 20, bold=True)
+
+    def hide_popup():
+        nonlocal popup_message
+        popup_message = ''
+
+    def show_popup(message: str):
+        nonlocal popup_message
+        popup_message = message
+
+    def draw_popup():
+        nonlocal popup_rect, popup_ok_rect
+        if not popup_message:
+            return
+
+        overlay = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
+        overlay.fill((0, 20, 50, 150))
+        screen.blit(overlay, (0, 0))
+
+        box_w = min(520, screen.get_width() - 80)
+        box_h = 220
+        popup_rect = pygame.Rect(
+            (screen.get_width() - box_w) // 2,
+            (screen.get_height() - box_h) // 2,
+            box_w,
+            box_h,
+        )
+        popup_ok_rect = pygame.Rect(popup_rect.centerx - 70, popup_rect.bottom - 60, 140, 40)
+
+        pygame.draw.rect(screen, (0, 116, 188), popup_rect, border_radius=14)
+        pygame.draw.rect(screen, (255, 255, 255), popup_rect, 3, border_radius=14)
+
+        title = popup_title_font.render('Notification', True, (255, 255, 255))
+        screen.blit(title, title.get_rect(center=(popup_rect.centerx, popup_rect.y + 38)))
+
+        lines = popup_message.split('\n')
+        text_y = popup_rect.y + 84
+        for line in lines:
+            body = popup_body_font.render(line, True, (235, 245, 255))
+            screen.blit(body, body.get_rect(center=(popup_rect.centerx, text_y)))
+            text_y += 28
+
+        hovered = popup_ok_rect.collidepoint(pygame.mouse.get_pos())
+        btn_color = (0, 95, 160) if hovered else (0, 125, 205)
+        pygame.draw.rect(screen, btn_color, popup_ok_rect, border_radius=10)
+        pygame.draw.rect(screen, (255, 255, 255), popup_ok_rect, 2, border_radius=10)
+        ok_txt = popup_btn_font.render('OK', True, (255, 255, 255))
+        screen.blit(ok_txt, ok_txt.get_rect(center=popup_ok_rect.center))
 
     def reset():
         nonlocal stepper, current_step, animating, paused, last_step_ms
@@ -579,6 +633,7 @@ def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
         last_step_ms = walk_timer = 0
         phase      = 'idle'
         saved_path = []
+        hide_popup()
         renderer.reset_state()
         panel.reset_stats()
 
@@ -608,6 +663,15 @@ def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return 'exit'
+
+            if popup_message:
+                if event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_RETURN, pygame.K_SPACE):
+                    hide_popup()
+                    continue
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    if popup_ok_rect.collidepoint(event.pos) or not popup_rect.collidepoint(event.pos):
+                        hide_popup()
+                    continue
 
             if panel.handle_keydown(event):
                 reset()
@@ -685,6 +749,11 @@ def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
                             renderer.set_phase_walking(saved_path)
                         else:
                             phase = 'idle'
+                            if panel.selected_algo == 'Beam Search':
+                                show_popup(
+                                    'Beam Search could not find a path.\n'
+                                    'Try a larger beam width or another heuristic.'
+                                )
                 else:
                     animating = False
 
@@ -702,6 +771,7 @@ def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
         screen.fill(BACKGROUND)
         renderer.draw(screen)
         panel.draw(screen, animating=animating, paused=paused)
+        draw_popup()
         pygame.display.flip()
 
 
