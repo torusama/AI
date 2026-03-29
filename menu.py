@@ -147,6 +147,41 @@ def _update_map_results(map_results: dict, map_path: str, algorithm: str,
     }
 
 
+def _result_row_key(algorithm: str, selected_heuristic: str) -> str:
+    if algorithm in HEURISTIC_ROW_ALGOS:
+        return f'{algorithm}::{selected_heuristic}'
+    return f'{algorithm}::none'
+
+
+def _get_cached_result(map_results: dict, map_path: str, algorithm: str,
+                       selected_heuristic: str) -> dict | None:
+    map_rows = map_results.get(map_path, {})
+    row = map_rows.get(_result_row_key(algorithm, selected_heuristic))
+    if not row:
+        return None
+    if row.get('cost', '_') == '_':
+        return None
+    return row
+
+
+def _clear_cached_result(map_results: dict, map_path: str, algorithm: str,
+                         selected_heuristic: str):
+    if map_path not in map_results:
+        return
+
+    row_key = _result_row_key(algorithm, selected_heuristic)
+    if algorithm in HEURISTIC_ROW_ALGOS:
+        map_results[map_path].pop(row_key, None)
+        has_any = any(
+            key.startswith(f'{algorithm}::') and key != f'{algorithm}::_'
+            for key in map_results[map_path].keys()
+        )
+        if not has_any:
+            map_results[map_path][f'{algorithm}::_'] = _empty_algo_result(algorithm, '_')
+    else:
+        map_results[map_path][row_key] = _empty_algo_result(algorithm, '_')
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def load_img(path: str, size=None) -> pygame.Surface:
@@ -570,6 +605,33 @@ def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
     walk_timer   = 0
     run_speed_label = '_'
 
+    def apply_cached_stats_to_panel():
+        cached = _get_cached_result(
+            map_results=map_results,
+            map_path=map_path,
+            algorithm=panel.selected_algo,
+            selected_heuristic=panel.selected_heuristic,
+        )
+        if not cached:
+            panel.reset_stats()
+            return
+        panel.update_stats(
+            algorithm=cached.get('algorithm', panel.selected_algo),
+            cost=cached.get('cost', '_'),
+            length=cached.get('path_length', '_'),
+            nodes=cached.get('nodes_found', '_'),
+            time_ms=0.0,
+        )
+        panel.stats['Time'] = str(cached.get('time', '_'))
+
+    def clear_selected_cached_result():
+        _clear_cached_result(
+            map_results=map_results,
+            map_path=map_path,
+            algorithm=panel.selected_algo,
+            selected_heuristic=panel.selected_heuristic,
+        )
+
     def reset():
         nonlocal stepper, current_step, animating, paused, last_step_ms
         nonlocal phase, saved_path, walk_timer
@@ -583,6 +645,9 @@ def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
 
     def start_search():
         nonlocal stepper, current_step, animating, paused, last_step_ms, phase, run_speed_label
+        # Running again should replace old data for current algorithm/heuristic.
+        clear_selected_cached_result()
+        panel.reset_stats()
         algo_name    = panel.selected_algo
         algo_fn      = ALGORITHMS[algo_name]
         if algo_name == 'Beam Search':
@@ -598,6 +663,8 @@ def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
         last_step_ms = pygame.time.get_ticks()
         phase        = 'searching'
 
+    apply_cached_stats_to_panel()
+
     # ── Game loop ─────────────────────────────────────────────────────────
     while True:
         now       = pygame.time.get_ticks()
@@ -610,10 +677,13 @@ def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
 
             if panel.handle_keydown(event):
                 reset()
+                apply_cached_stats_to_panel()
             if panel.handle_heuristic_click(event):
                 reset()
+                apply_cached_stats_to_panel()
             if panel.handle_beam_width_click(event):
                 reset()
+                apply_cached_stats_to_panel()
             panel.handle_speed_click(event)
 
             # ── Back → Choose Map (with fade) ─────────────────────────────
@@ -641,7 +711,9 @@ def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
                     animating = False
 
             if panel.btn_reset.is_clicked(event):
+                clear_selected_cached_result()
                 reset()
+                apply_cached_stats_to_panel()
 
         # ── Search tick ───────────────────────────────────────────────────
         if phase == 'searching' and animating and not paused and stepper is not None:
