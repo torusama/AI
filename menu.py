@@ -30,7 +30,7 @@ from Algorithm.beamsearch import beam_search_steps
 from Algorithm.bidirectional import bidirectional_steps
 from Algorithm.idastar import ida_star_steps
 from gui.renderer import Renderer, CELL_SIZE, MARGIN
-from gui.panel import Panel
+from gui.panel import Panel, set_font_path
 from gui.colors import BACKGROUND
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -338,12 +338,13 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
         ))
 
     # Stats table controls
-    font_btn = pygame.font.SysFont('Arial Black', 24, bold=True)
-    font_title = pygame.font.SysFont('Arial Black', 28, bold=True)
-    font_header = pygame.font.SysFont('Arial Black', 16, bold=True)
-    font_header_algo = pygame.font.SysFont('Arial Black', 12, bold=True)
-    font_body = pygame.font.SysFont('Verdana', 16, bold=True)
-    font_hint = pygame.font.SysFont('Verdana', 15, bold=True)
+    _fp = os.path.join(base_dir, 'Jersey15-Regular.ttf')
+    font_btn         = pygame.font.Font(_fp, 24)
+    font_title       = pygame.font.Font(_fp, 28)
+    font_header      = pygame.font.Font(_fp, 16)
+    font_header_algo = pygame.font.Font(_fp, 12)
+    font_body        = pygame.font.Font(_fp, 16)
+    font_hint        = pygame.font.Font(_fp, 15)
 
     rect_stats = pygame.Rect(W - 212, H - 70, 180, 44)
     show_stats = False
@@ -711,6 +712,8 @@ def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
 def run_app(base_dir: str):
     """Main app loop — all screens share one window and clock."""
     pygame.init()
+    # Đặt font Jersey15 cho toàn bộ UI
+    set_font_path(os.path.join(base_dir, 'Jersey15-Regular.ttf'))
     screen = pygame.display.set_mode((TARGET_W, TARGET_H))
     pygame.display.set_caption('Shipper AI')
     clock  = pygame.time.Clock()
