@@ -16,12 +16,10 @@ def _compute_path_cost(grid: Grid, path):
     # Path cost is the sum of costs of entered cells (excluding start).
     return sum(grid.get_cost(r, c) for r, c in path[1:])
 
-
-import time
-
 def _ida_star_run(grid: Grid, capture_steps: bool, heuristic_name: str = 'manhattan'):
     start = grid.start
     goal = grid.goal
+    all_goods = frozenset(grid.goods)
 
     # Trường hợp cơ bản: start hoặc goal không tồn tại
     if not start or not goal:
@@ -31,6 +29,9 @@ def _ida_star_run(grid: Grid, capture_steps: bool, heuristic_name: str = 'manhat
         }
 
     t0 = time.time()
+    start_goods = frozenset({start}) if start in all_goods else frozenset()
+    start_state = (start, start_goods)
+
     # Ngưỡng bắt đầu bằng heuristic từ điểm xuất phát
     threshold = heuristic_to_goal(start, goal, heuristic_name)
     
@@ -38,7 +39,7 @@ def _ida_star_run(grid: Grid, capture_steps: bool, heuristic_name: str = 'manhat
     snapshots = []
     
     # Transposition Table để tránh bùng nổ trạng thái trên đồ thị lưới
-    # Lưu cấu trúc: { (row, col): min_g_cost }
+    # Lưu cấu trúc: { ((row, col), goods_collected): min_g_cost }
     transposition_table = {}
 
     def save_snapshot(path):
@@ -46,7 +47,7 @@ def _ida_star_run(grid: Grid, capture_steps: bool, heuristic_name: str = 'manhat
             return
         snapshots.append({
             "explored": frozenset(explored_overall),
-            "frontier": frozenset(path),
+            "frontier": frozenset(state[0] for state in path),
             "cell_branch": {},
             "path": [],
             "found": False,
@@ -56,7 +57,8 @@ def _ida_star_run(grid: Grid, capture_steps: bool, heuristic_name: str = 'manhat
         })
 
     def search(path, path_set, g_cost, bound):
-        node = path[-1]
+        state = path[-1]
+        node, collected_goods = state
         h_cost = heuristic_to_goal(node, goal, heuristic_name)
         f_cost = g_cost + h_cost
 
@@ -66,14 +68,14 @@ def _ida_star_run(grid: Grid, capture_steps: bool, heuristic_name: str = 'manhat
 
         # TỐI ƯU: Kiểm tra Transposition Table
         # Nếu đã từng đến ô này với chi phí g_cost nhỏ hơn hoặc bằng, bỏ qua nhánh này
-        if node in transposition_table and transposition_table[node] <= g_cost:
+        if state in transposition_table and transposition_table[state] <= g_cost:
             return float("inf"), None
-        transposition_table[node] = g_cost
+        transposition_table[state] = g_cost
 
         explored_overall.add(node)
         save_snapshot(path)
 
-        if node == goal:
+        if node == goal and collected_goods == all_goods:
             return "FOUND", list(path)
 
         min_exceeded = float("inf")
@@ -82,25 +84,28 @@ def _ida_star_run(grid: Grid, capture_steps: bool, heuristic_name: str = 'manhat
         # Lấy danh sách láng giềng và sắp xếp theo f_cost dự kiến (g + h)
         # Điều này giúp tìm ra mục tiêu nhanh hơn trong mỗi threshold
         neighbors = []
-        for neighbor, move_cost in grid.get_neighbors(row, col):
+        for neighbor, _ in grid.get_neighbors(row, col):
             npos = neighbor.position
+            n_collected_goods = collected_goods
+            if npos in all_goods:
+                n_collected_goods = collected_goods | frozenset({npos})
+            n_state = (npos, n_collected_goods)
             # g_cost mới = g hiện tại + cost để bước vào ô đó
             n_g = g_cost + neighbor.cost
             n_h = heuristic_to_goal(npos, goal, heuristic_name)
-            neighbors.append((neighbor, n_g, n_g + n_h))
+            neighbors.append((n_state, n_g, n_g + n_h))
             
         # Sắp xếp theo f_cost (phần tử thứ 3 trong tuple)
         neighbors.sort(key=lambda x: x[2])
 
-        for neighbor, n_g, _ in neighbors:
-            npos = neighbor.position
+        for n_state, n_g, _ in neighbors:
             
             # Tránh chu trình trong nhánh hiện tại
-            if npos in path_set:
+            if n_state in path_set:
                 continue
 
-            path.append(npos)
-            path_set.add(npos)
+            path.append(n_state)
+            path_set.add(n_state)
 
             result, found_path = search(path, path_set, n_g, bound)
             
@@ -113,7 +118,7 @@ def _ida_star_run(grid: Grid, capture_steps: bool, heuristic_name: str = 'manhat
 
             # Quay lui (Backtracking)
             path.pop()
-            path_set.remove(npos)
+            path_set.remove(n_state)
 
         return min_exceeded, None
 
@@ -124,13 +129,13 @@ def _ida_star_run(grid: Grid, capture_steps: bool, heuristic_name: str = 'manhat
     while True:
         # Reset Transposition Table cho mỗi lần tăng threshold
         transposition_table = {}
-        path = [start]
-        path_set = {start}
+        path = [start_state]
+        path_set = {start_state}
 
         result, maybe_path = search(path, path_set, 0, threshold)
 
         if result == "FOUND":
-            final_path = maybe_path or []
+            final_path = [state[0] for state in (maybe_path or [])]
             found = True
             break
 
