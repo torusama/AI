@@ -253,14 +253,14 @@ def screen_main_menu(screen: pygame.Surface, clock: pygame.time.Clock,
     img_start = load_img(pic("start_button.png"))
     img_exit  = load_img(pic("exit_button.png"))
 
-    btn_w   = int(W * 0.36)
+    btn_w   = int(W * 0.56)
     btn_h_s = int(img_start.get_height() * btn_w / img_start.get_width())
     btn_h_e = int(img_exit.get_height()  * btn_w / img_exit.get_width())
     img_start = pygame.transform.smoothscale(img_start, (btn_w, btn_h_s))
     img_exit  = pygame.transform.smoothscale(img_exit,  (btn_w, btn_h_e))
 
-    rect_start = img_start.get_rect(center=(int(W * 0.626), int(H * 0.57)))
-    rect_exit  = img_exit.get_rect(center=(int(W * 0.648),  int(H * 0.72)))
+    rect_start = img_start.get_rect(center=(int(W * 0.574), int(H * 0.57)))
+    rect_exit  = img_exit.get_rect(center=(int(W * 0.5958),  int(H * 0.72)))
 
     # Draw once before fade-in
     screen.blit(bg, (0, 0))
