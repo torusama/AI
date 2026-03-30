@@ -25,10 +25,10 @@ CARD_BG       = (0, 100, 175)
 CARD_BORDER   = (255, 255, 255)
 
 SPEED_LEVELS = [
-    ('Slow',   600),
-    ('Normal', 300),
-    ('Fast',    50),
-    ('Max',      2),
+    ('Slow',   180),
+    ('Normal', 80),
+    ('Fast',    24),
+    ('Max',      3),
 ]
 ALGO_KEYS       = ['BFS', 'DFS', 'UCS', 'A*', 'Greedy Search', 'Beam Search', 'Bidirectional Search', 'IDA*']
 HEURISTIC_ALGOS = {'A*', 'Greedy Search', 'Beam Search', 'IDA*'}
