@@ -735,78 +735,65 @@ def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
         nonlocal popup_message
         popup_message = message
 
+    # Load khung.png một lần (cache lại để không load lại mỗi frame)
+    _khung_raw = None
+    _khung_path = os.path.join(base_dir, 'picture', 'khung.png')
+    if os.path.exists(_khung_path):
+        _khung_raw = pygame.image.load(_khung_path).convert_alpha()
+
     def draw_popup():
         nonlocal popup_rect, popup_ok_rect
         if not popup_message:
             return
 
+        # ── Overlay tối phía sau ──────────────────────────────────────────
         overlay = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
         overlay.fill((0, 10, 30, 160))
         screen.blit(overlay, (0, 0))
 
-        box_w = min(620, screen.get_width() - 80)
-        box_h = 280
+        # ── Vùng nội dung thật sự (text + button căn theo đây) ────────────
+        box_w = min(640, screen.get_width() - 80)
+        box_h = 290
         popup_rect = pygame.Rect(
             (screen.get_width() - box_w) // 2,
             (screen.get_height() - box_h) // 2,
             box_w,
             box_h,
         )
-        popup_ok_rect = pygame.Rect(popup_rect.centerx - 80, popup_rect.bottom - 72, 160, 48)
+        popup_ok_rect = pygame.Rect(popup_rect.centerx - 80, popup_rect.bottom - 68, 160, 48)
 
-        # ── Khung chính — xanh neon sáng ─────────────────────────────────
-        # Gradient: vẽ từ trên (sáng) xuống dưới (tối hơn chút)
-        for row in range(box_h):
-            t = row / box_h
-            r_c = int(0   + 0   * t)
-            g_c = int(230 - 30  * t)
-            b_c = int(255 - 20  * t)
-            pygame.draw.line(screen, (r_c, g_c, b_c),
-                             (popup_rect.x, popup_rect.y + row),
-                             (popup_rect.right, popup_rect.y + row))
-        # Clip gradient vào border-radius bằng cách vẽ mask
-        clip_surf = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
-        pygame.draw.rect(clip_surf, (255, 255, 255, 255),
-                         clip_surf.get_rect(), border_radius=18)
-        # Lấy pixel gradient đã vẽ rồi mask lại
-        grad_surf = screen.subsurface(popup_rect).copy()
-        grad_surf.blit(clip_surf, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
-
-        # Vẽ lại nền tối trước rồi blit gradient đã clip
-        pygame.draw.rect(screen, (0, 200, 240), popup_rect, border_radius=18)
-        screen.blit(grad_surf, popup_rect.topleft)
-
-        # ── Shimmer trên cùng ─────────────────────────────────────────────
-        shim_h = box_h // 3
-        shim = pygame.Surface((box_w, shim_h), pygame.SRCALPHA)
-        for row in range(shim_h):
-            a = int(60 * (1 - row / shim_h) ** 1.5)
-            pygame.draw.line(shim, (255, 255, 255, a), (0, row), (box_w - 1, row))
-        mask = pygame.Surface((box_w, shim_h), pygame.SRCALPHA)
-        pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(), border_radius=18)
-        shim.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
-        screen.blit(shim, popup_rect.topleft)
+        # ── Blit khung.png scale to hơn để dây treo nằm ngoài popup_rect ─
+        # khung.png: phần đen (dây) ≈ 12% trên cùng → mở rộng thêm 32% chiều cao
+        # và 8% chiều rộng để viền không bị cắt
+        if _khung_raw:
+            kw = int(box_w * 1.08)
+            kh = int(box_h * 1.3)   # to thêm để dây treo lùi ra ngoài
+            khung_scaled = pygame.transform.smoothscale(_khung_raw, (kw, kh))
+            # Offset: căn giữa ngang, dịch lên trên để phần nội dung xanh
+            # khớp với popup_rect (dây treo nằm phía trên popup_rect)
+            kx = popup_rect.centerx - kw // 2
+            # Tỉ lệ phần dây trong ảnh gốc ≈ 12% → offset_y = 12% * kh
+            ky = popup_rect.top - int(kh * 0.15)
+            screen.blit(khung_scaled, (kx, ky))
 
         # ── Title ─────────────────────────────────────────────────────────
-        title = popup_title_font.render('Notification', True, (255, 255, 255))
-        # Đổ bóng chữ
-        title_shadow = popup_title_font.render('Notification', True, (0, 80, 120))
-        screen.blit(title_shadow, title_shadow.get_rect(center=(popup_rect.centerx + 2, popup_rect.y + 50 + 2)))
-        screen.blit(title, title.get_rect(center=(popup_rect.centerx, popup_rect.y + 50)))
+        title = popup_title_font.render('Notification', True, (10, 60, 100))
+        title_shadow = popup_title_font.render('Notification', True, (180, 230, 240))
+        screen.blit(title_shadow, title_shadow.get_rect(center=(popup_rect.centerx + 2, popup_rect.y + 52 + 2)))
+        screen.blit(title,        title.get_rect(center=(popup_rect.centerx, popup_rect.y + 52)))
 
         # ── Body text ─────────────────────────────────────────────────────
         lines = popup_message.split('\n')
-        text_y = popup_rect.y + 108
+        text_y = popup_rect.y + 118
         for line in lines:
-            body = popup_body_font.render(line, True, (10, 30, 80))
+            body = popup_body_font.render(line, True, (10, 40, 90))
             screen.blit(body, body.get_rect(center=(popup_rect.centerx, text_y)))
-            text_y += 34
+            text_y += 36
 
-        # ── OK button ─────────────────────────────────────────────────────
+        # ── OK button (giữ nguyên style cũ) ──────────────────────────────
         hovered = popup_ok_rect.collidepoint(pygame.mouse.get_pos())
         btn_color = (0, 80, 160) if hovered else (0, 50, 130)
         pygame.draw.rect(screen, btn_color, popup_ok_rect, border_radius=12)
-        # Shimmer trên nút
         btn_shim = pygame.Surface((popup_ok_rect.width, popup_ok_rect.height // 2), pygame.SRCALPHA)
         for row in range(btn_shim.get_height()):
             a = int(50 * (1 - row / btn_shim.get_height()))
