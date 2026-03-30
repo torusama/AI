@@ -27,7 +27,7 @@ CARD_BORDER   = (255, 255, 255)
 SPEED_LEVELS = [
     ('Slow',   600),
     ('Normal', 300),
-    ('Fast',   100),
+    ('Fast',    50),
     ('Max',      2),
 ]
 ALGO_KEYS       = ['BFS', 'DFS', 'UCS', 'A*', 'Greedy Search', 'Beam Search', 'Bidirectional Search', 'IDA*']

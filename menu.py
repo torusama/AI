@@ -628,6 +628,7 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
                 # ── Stats overlay đang mở: chỉ xử lý click bên trong overlay ──
                 if show_stats:
                     if rect_close.collidepoint(event.pos):
+                        sound_mgr.play('click')
                         show_stats = False
                     elif rect_prev.collidepoint(event.pos):
                         stats_map_idx = (stats_map_idx - 1) % len(MAP_LIST)
@@ -890,10 +891,12 @@ def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
 
             if popup_message:
                 if event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_RETURN, pygame.K_SPACE):
+                    sound_mgr.play('click')
                     hide_popup()
                     continue
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     if popup_ok_rect.collidepoint(event.pos) or not popup_rect.collidepoint(event.pos):
+                        sound_mgr.play('click')
                         hide_popup()
                     continue
 
