@@ -26,7 +26,7 @@ CARD_BORDER   = (255, 255, 255)
 
 SPEED_LEVELS = [
     ('Slow',   180),
-    ('Normal', 80),
+    ('Normal', 73),
     ('Fast',    24),
     ('Max',      3),
 ]
