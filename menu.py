@@ -494,33 +494,33 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
         row_h = 40
 
         cols = [
-            ('algorithm', 'Algorithm', 0.22),
-            ('cost', 'Cost', 0.10),
-            ('path_length', 'Path', 0.10),
-            ('nodes_found', 'Nodes', 0.13),
-            ('time', 'Time', 0.14),
-            ('heuristic', 'Heuristic', 0.20),
-            ('found', 'Found', 0.11),
+            ('algorithm', 'Algorithm'),
+            ('cost', 'Cost'),
+            ('path_length', 'Path'),
+            ('nodes_found', 'Nodes'),
+            ('time', 'Time'),
+            ('heuristic', 'Heuristic'),
+            ('found', 'Found'),
         ]
 
+        col_count = len(cols)
+        base_col_w = table_w // col_count
+        remainder = table_w % col_count
         edges = [table_x]
-        acc = table_x
-        for _, _, ratio in cols[:-1]:
-            acc += int(table_w * ratio)
-            edges.append(acc)
-        edges.append(table_x + table_w)
+        for idx in range(col_count):
+            extra = 1 if idx < remainder else 0
+            edges.append(edges[-1] + base_col_w + extra)
 
         # Header row: columns are properties
         header_rect = pygame.Rect(table_x, table_y, table_w, row_h)
         pygame.draw.rect(screen, (0, 95, 160), header_rect)
         pygame.draw.rect(screen, (255, 255, 255), header_rect, 1)
 
-        for idx, (_, label, _) in enumerate(cols):
+        for idx, (key, label) in enumerate(cols):
             x1 = edges[idx]
             x2 = edges[idx + 1]
-            key = cols[idx][0]
             txt = font_header_algo.render(label, True, (230, 247, 255))
-            if key in ('algorithm', 'heuristic'):
+            if key == 'algorithm':
                 screen.blit(txt, (x1 + 6, table_y + (row_h - txt.get_height()) // 2))
             else:
                 screen.blit(txt, txt.get_rect(center=((x1 + x2) // 2, table_y + row_h // 2)))
@@ -543,12 +543,12 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
             pygame.draw.rect(screen, (0, 126, 198) if absolute_idx % 2 == 0 else (0, 118, 190), row_rect)
             pygame.draw.rect(screen, (255, 255, 255), row_rect, 1)
 
-            for idx, (key, _, _) in enumerate(cols):
+            for idx, (key, _) in enumerate(cols):
                 x1 = edges[idx]
                 x2 = edges[idx + 1]
                 val = str(row_data.get(key, '_'))
                 txt = font_body.render(val, True, (255, 255, 255))
-                if key in ('algorithm', 'heuristic'):
+                if key == 'algorithm':
                     screen.blit(txt, (x1 + 6, y + (row_h - txt.get_height()) // 2))
                 else:
                     screen.blit(txt, txt.get_rect(center=((x1 + x2) // 2, y + row_h // 2)))
