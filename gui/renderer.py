@@ -66,6 +66,7 @@ class Renderer:
             _load(pic('wall4.png'), self._cell),
             _load(pic('wall5.png'), self._cell),
         ]
+        self.spr_start       = _load(pic('start_path.png'),    self._cell)
         self.spr_cost        = _load(pic('cost_path.png'),     self._cell)
         self.spr_good        = _load(pic('good.png'),          self._cell)
         self.spr_goal        = _load(pic('goal.png'),          self._cell)
@@ -204,7 +205,9 @@ class Renderer:
             return self.spr_good
         if ct == 'G':
             return self.spr_goal
-        # E và P đều dùng normal_path / normal_path2
+        if ct == 'P':
+            return self.spr_start
+        # E dùng normal_path / normal_path2
         idx = self._e_counter.get((row, col), 0)
         if idx % 4 == 3:          # cứ 3 normal_path thì 1 normal_path2
             if self._direction == 'y':
