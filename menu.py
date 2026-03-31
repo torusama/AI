@@ -494,14 +494,13 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
         row_h = 40
 
         cols = [
-            ('algorithm', 'Algorithm', 0.20),
-            ('cost', 'Cost', 0.09),
-            ('path_length', 'Path', 0.09),
+            ('algorithm', 'Algorithm', 0.22),
+            ('cost', 'Cost', 0.10),
+            ('path_length', 'Path', 0.10),
             ('nodes_found', 'Nodes', 0.13),
-            ('speed', 'Speed', 0.13),
-            ('time', 'Time', 0.15),
-            ('heuristic', 'Heuristic', 0.12),
-            ('found', 'Found', 0.09),
+            ('time', 'Time', 0.14),
+            ('heuristic', 'Heuristic', 0.20),
+            ('found', 'Found', 0.11),
         ]
 
         edges = [table_x]
