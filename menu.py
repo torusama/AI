@@ -12,6 +12,7 @@ Flow:
 
 import os
 import sys
+import tracemalloc
 import pygame
 try:
     import cv2
@@ -74,6 +75,10 @@ HEURISTIC_ROW_ALGOS = {'A*', 'IDA*', 'Beam Search'}
 HEURISTIC_ORDER = ['manhattan', 'euclidean']
 
 
+def _format_ram_mb(ram_mb: float) -> str:
+    return f'{ram_mb:.2f} MB'
+
+
 def _empty_algo_result(algo_name: str, heuristic: str = '_') -> dict:
     return {
         'row_key': f'{algo_name}::{heuristic}',
@@ -85,6 +90,7 @@ def _empty_algo_result(algo_name: str, heuristic: str = '_') -> dict:
         'nodes_found': '_',
         'speed': '_',
         'time': '_',
+        'ram': '_',
     }
 
 
@@ -143,7 +149,8 @@ def _get_map_results_rows(map_results: dict, map_path: str) -> list:
 
 def _update_map_results(map_results: dict, map_path: str, algorithm: str,
                         found: bool, cost, path_length: int, nodes_found: int, time_ms: float,
-                        selected_speed: str, selected_heuristic: str, selected_beam_width: int | None = None):
+                        selected_speed: str, selected_heuristic: str,
+                        selected_beam_width: int | None = None, ram: str = '_'):
     if map_path not in map_results:
         map_results[map_path] = _empty_map_results()
 
@@ -175,6 +182,7 @@ def _update_map_results(map_results: dict, map_path: str, algorithm: str,
         'nodes_found': str(nodes_found),
         'speed': speed,
         'time': f'{time_ms:.1f} ms',
+        'ram': str(ram) if ram not in (None, '', '--') else '_',
     }
 
 
@@ -424,9 +432,10 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
     _fp = os.path.join(base_dir, 'Jersey15-Regular.ttf')
     font_btn         = pygame.font.Font(_fp, 30)
     font_title       = pygame.font.Font(_fp, 34)
-    font_header      = pygame.font.Font(_fp, 20)
-    font_header_algo = pygame.font.Font(_fp, 16)
-    font_body        = pygame.font.Font(_fp, 20)
+    font_header      = pygame.font.Font(_fp, 18)
+    font_header_algo = pygame.font.Font(_fp, 15)
+    font_body        = pygame.font.Font(_fp, 18)
+    font_body_algo   = pygame.font.Font(_fp, 16)
     font_hint        = pygame.font.Font(_fp, 19)
 
     rect_stats = pygame.Rect(W - 212, H - 70, 180, 44)
@@ -499,6 +508,7 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
             ('path_length', 'Path'),
             ('nodes_found', 'Nodes'),
             ('time', 'Time'),
+            ('ram', 'RAM'),
             ('heuristic', 'Heuristic'),
             ('found', 'Found'),
         ]
@@ -519,7 +529,8 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
         for idx, (key, label) in enumerate(cols):
             x1 = edges[idx]
             x2 = edges[idx + 1]
-            txt = font_header_algo.render(label, True, (230, 247, 255))
+            hdr_font = font_header_algo if key == 'algorithm' else font_header
+            txt = hdr_font.render(label, True, (230, 247, 255))
             if key == 'algorithm':
                 screen.blit(txt, (x1 + 6, table_y + (row_h - txt.get_height()) // 2))
             else:
@@ -547,7 +558,8 @@ def screen_choose_map(screen: pygame.Surface, clock: pygame.time.Clock,
                 x1 = edges[idx]
                 x2 = edges[idx + 1]
                 val = str(row_data.get(key, '_'))
-                txt = font_body.render(val, True, (255, 255, 255))
+                body_font = font_body_algo if key == 'algorithm' else font_body
+                txt = body_font.render(val, True, (255, 255, 255))
                 if key == 'algorithm':
                     screen.blit(txt, (x1 + 6, y + (row_h - txt.get_height()) // 2))
                 else:
@@ -718,6 +730,8 @@ def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
     saved_path   = []
     walk_timer   = 0
     run_speed_label = '_'
+    search_ram_peak_mb = None
+    memory_tracking_active = False
     popup_message = ''
     popup_rect = pygame.Rect(0, 0, 0, 0)
     popup_ok_rect = pygame.Rect(0, 0, 0, 0)
@@ -733,6 +747,36 @@ def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
     def show_popup(message: str):
         nonlocal popup_message
         popup_message = message
+
+    def stop_memory_tracking():
+        nonlocal memory_tracking_active
+        if not memory_tracking_active and not tracemalloc.is_tracing():
+            return
+        try:
+            if tracemalloc.is_tracing():
+                tracemalloc.stop()
+        finally:
+            memory_tracking_active = False
+
+    def start_memory_tracking():
+        nonlocal search_ram_peak_mb, memory_tracking_active
+        search_ram_peak_mb = None
+        stop_memory_tracking()
+        tracemalloc.start()
+        memory_tracking_active = True
+
+    def finish_memory_tracking() -> str | None:
+        nonlocal search_ram_peak_mb
+        ram_text = None
+        if memory_tracking_active and tracemalloc.is_tracing():
+            try:
+                current, peak = tracemalloc.get_traced_memory()
+                search_ram_peak_mb = peak / (1024 * 1024)
+                ram_text = _format_ram_mb(search_ram_peak_mb)
+            except RuntimeError:
+                search_ram_peak_mb = None
+        stop_memory_tracking()
+        return ram_text
 
     # Load khung.png một lần (cache lại để không load lại mỗi frame)
     _khung_raw = None
@@ -817,9 +861,51 @@ def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
             cost=cached.get('cost', '_'),
             length=cached.get('path_length', '_'),
             nodes=cached.get('nodes_found', '_'),
-            time_ms=0.0,
+            time_ms=cached.get('time', '_'),
+            ram=cached.get('ram', '_'),
         )
-        panel.stats['Time'] = str(cached.get('time', '_'))
+
+    def finalize_search_result(step_data: dict, now_ms: int):
+        nonlocal animating, phase, saved_path, walk_timer
+        ram_text = finish_memory_tracking() or '--'
+        animating  = False
+        found      = step_data.get('found', False)
+        saved_path = step_data.get('path', [])
+        panel.update_stats(
+            algorithm=panel.selected_algo,
+            cost=step_data.get('cost', 0),
+            length=len(saved_path),
+            nodes=len(step_data.get('explored', set())),
+            time_ms=step_data.get('time_ms', 0),
+            ram=ram_text,
+        )
+        _update_map_results(
+            map_results=map_results,
+            map_path=map_path,
+            algorithm=panel.selected_algo,
+            found=found,
+            cost=step_data.get('cost', 0),
+            path_length=len(saved_path),
+            nodes_found=len(step_data.get('explored', set())),
+            time_ms=step_data.get('time_ms', 0),
+            selected_speed=run_speed_label,
+            selected_heuristic=panel.selected_heuristic,
+            selected_beam_width=panel.selected_beam_width,
+            ram=ram_text,
+        )
+        if found and saved_path:
+            phase      = 'walking'
+            animating  = True
+            walk_timer = now_ms
+            renderer.set_phase_walking(saved_path)
+        else:
+            phase = 'idle'
+            if panel.selected_algo == 'Beam Search':
+                sound_mgr.play('goal')
+                show_popup(
+                    'Beam Search could not find a path.\n'
+                    'Try a larger beam width or another heuristic.'
+                )
 
     def clear_selected_cached_result():
         _clear_cached_result(
@@ -833,11 +919,14 @@ def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
     def reset():
         nonlocal stepper, current_step, animating, paused, last_step_ms
         nonlocal phase, saved_path, walk_timer
+        nonlocal search_ram_peak_mb
+        stop_memory_tracking()
         stepper = current_step = None
         animating = paused = False
         last_step_ms = walk_timer = 0
         phase      = 'idle'
         saved_path = []
+        search_ram_peak_mb = None
         hide_popup()
         renderer.reset_state()
         panel.reset_stats()
@@ -847,6 +936,7 @@ def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
         # Running again should replace old data for current algorithm/heuristic.
         clear_selected_cached_result()
         panel.reset_stats()
+        start_memory_tracking()
         algo_name    = panel.selected_algo
         algo_fn      = ALGORITHMS[algo_name]
         if algo_name == 'Beam Search':
@@ -857,6 +947,12 @@ def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
             stepper = algo_fn(grid)
         current_step = next(stepper, None)
         run_speed_label = panel.selected_speed_label
+        if current_step is None:
+            stop_memory_tracking()
+            phase = 'idle'
+            animating = False
+            paused = False
+            return
         animating    = True
         paused       = False
         last_step_ms = pygame.time.get_ticks()
@@ -947,44 +1043,13 @@ def screen_game(screen: pygame.Surface, clock: pygame.time.Clock,
                     renderer.set_phase_searching(explored, frontier, direction)
 
                     if current_step.get('done'):
-                        animating  = False
-                        found      = current_step.get('found', False)
-                        saved_path = current_step.get('path', [])
-                        panel.update_stats(
-                            algorithm = panel.selected_algo,
-                            cost      = current_step.get('cost', 0),
-                            length    = len(saved_path),
-                            nodes     = len(current_step.get('explored', set())),
-                            time_ms   = current_step.get('time_ms', 0),
-                        )
-                        _update_map_results(
-                            map_results=map_results,
-                            map_path=map_path,
-                            algorithm=panel.selected_algo,
-                            found=found,
-                            cost=current_step.get('cost', 0),
-                            path_length=len(saved_path),
-                            nodes_found=len(current_step.get('explored', set())),
-                            time_ms=current_step.get('time_ms', 0),
-                            selected_speed=run_speed_label,
-                            selected_heuristic=panel.selected_heuristic,
-                            selected_beam_width=panel.selected_beam_width,
-                        )
-                        if found and saved_path:
-                            phase      = 'walking'
-                            animating  = True
-                            walk_timer = now
-                            renderer.set_phase_walking(saved_path)
-                        else:
-                            phase = 'idle'
-                            if panel.selected_algo == 'Beam Search':
-                                sound_mgr.play('goal')
-                                show_popup(
-                                    'Beam Search could not find a path.\n'
-                                    'Try a larger beam width or another heuristic.'
-                                )
+                        finalize_search_result(current_step, now)
                 else:
-                    animating = False
+                    if current_step is not None and current_step.get('done'):
+                        finalize_search_result(current_step, now)
+                    else:
+                        stop_memory_tracking()
+                        animating = False
 
         # ── Walk tick ─────────────────────────────────────────────────────
         if phase == 'walking' and animating and not paused:

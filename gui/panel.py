@@ -238,6 +238,7 @@ class Panel:
             'Path Length': '--',
             'Nodes Found': '--',
             'Time':        '--',
+            'RAM':         '--',
         }
 
         self._particles = [_Particle(width, height) for _ in range(28)]
@@ -377,12 +378,21 @@ class Panel:
         return BEAM_WIDTH_OPTIONS[self.selected_beam_width_idx]
 
     # ── Stats ─────────────────────────────────────────────────────────────
-    def update_stats(self, algorithm, cost, length, nodes, time_ms):
-        self.stats['Algorithm']   = str(algorithm)
-        self.stats['Cost']        = str(cost)
-        self.stats['Path Length'] = str(length)
-        self.stats['Nodes Found'] = str(nodes)
-        self.stats['Time']        = f'{time_ms:.1f} ms'
+    def _normalize_stat_value(self, value):
+        if value in (None, '', '_'):
+            return '--'
+        return str(value)
+
+    def update_stats(self, algorithm, cost, length, nodes, time_ms, ram='--'):
+        self.stats['Algorithm']   = self._normalize_stat_value(algorithm)
+        self.stats['Cost']        = self._normalize_stat_value(cost)
+        self.stats['Path Length'] = self._normalize_stat_value(length)
+        self.stats['Nodes Found'] = self._normalize_stat_value(nodes)
+        if isinstance(time_ms, (int, float)):
+            self.stats['Time'] = f'{time_ms:.1f} ms'
+        else:
+            self.stats['Time'] = self._normalize_stat_value(time_ms)
+        self.stats['RAM'] = self._normalize_stat_value(ram)
 
     def reset_stats(self):
         for k in self.stats:
