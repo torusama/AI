@@ -194,18 +194,128 @@ def ida_star_steps(grid: Grid, heuristic_name: str = 'manhattan'):
         "time_ms": (time.time() - t0) * 1000,
     }
 
-    result = _ida_star_run(grid, capture_steps=True, heuristic_name=heuristic_name)
+    # ── FIX: chạy _ida_star_run trong thread riêng, yield snapshot ngay khi có ──
+    import threading, queue
 
-    for snap in result["snapshots"]:
-        yield snap
+    _DONE = object()  # sentinel
 
-    yield {
-        "explored": frozenset(result["explored"]),
-        "frontier": frozenset(),
-        "cell_branch": {},
-        "path": result["path"],
-        "found": result["found"],
-        "done": True,
-        "cost": result["cost"],
-        "time_ms": result["time_ms"],
-    }
+    def worker(q):
+        all_goods = frozenset(grid.goods)
+        start_goods = frozenset({start}) if start in all_goods else frozenset()
+        start_state = (start, start_goods)
+
+        threshold = heuristic_to_goal(start, goal, heuristic_name)
+        explored_overall = set()
+        transposition_table = {}
+        final_path = []
+        found = False
+
+        def search(path, path_set, g_cost, bound):
+            state = path[-1]
+            node, collected_goods = state
+            h_cost = heuristic_to_goal(node, goal, heuristic_name)
+            f_cost = g_cost + h_cost
+
+            if f_cost > bound:
+                return f_cost, None
+
+            if state in transposition_table and transposition_table[state] <= g_cost:
+                return float("inf"), None
+            transposition_table[state] = g_cost
+
+            explored_overall.add(node)
+
+            # Yield snapshot ngay lập tức qua queue
+            q.put({
+                "explored": frozenset(explored_overall),
+                "frontier": frozenset(s[0] for s in path),
+                "cell_branch": {},
+                "path": [],
+                "found": False,
+                "done": False,
+                "cost": 0,
+                "time_ms": (time.time() - t0) * 1000,
+            })
+
+            if node == goal and collected_goods == all_goods:
+                return "FOUND", list(path)
+
+            min_exceeded = float("inf")
+            row, col = node
+
+            neighbors = []
+            for neighbor, _ in grid.get_neighbors(row, col):
+                npos = neighbor.position
+                n_collected_goods = collected_goods
+                if npos in all_goods:
+                    n_collected_goods = collected_goods | frozenset({npos})
+                n_state = (npos, n_collected_goods)
+                n_g = g_cost + neighbor.cost
+                n_h = heuristic_to_goal(npos, goal, heuristic_name)
+                neighbors.append((n_state, n_g, n_g + n_h))
+
+            neighbors.sort(key=lambda x: x[2])
+
+            for n_state, n_g, _ in neighbors:
+                if n_state in path_set:
+                    continue
+
+                path.append(n_state)
+                path_set.add(n_state)
+
+                result, found_path = search(path, path_set, n_g, bound)
+
+                if result == "FOUND":
+                    return "FOUND", found_path
+
+                if result < min_exceeded:
+                    min_exceeded = result
+
+                path.pop()
+                path_set.remove(n_state)
+
+            return min_exceeded, None
+
+        while True:
+            transposition_table = {}
+            path = [start_state]
+            path_set = {start_state}
+
+            result, maybe_path = search(path, path_set, 0, threshold)
+
+            if result == "FOUND":
+                final_path = [state[0] for state in (maybe_path or [])]
+                found = True
+                break
+
+            if result == float("inf"):
+                break
+
+            threshold = result
+
+        time_ms = (time.time() - t0) * 1000
+        final_cost = _compute_path_cost(grid, final_path) if found else 0
+
+        q.put(_DONE)
+        q.put({
+            "explored": frozenset(explored_overall),
+            "frontier": frozenset(),
+            "cell_branch": {},
+            "path": final_path,
+            "found": found,
+            "done": True,
+            "cost": final_cost,
+            "time_ms": time_ms,
+        })
+
+    q = queue.Queue()
+    t = threading.Thread(target=worker, args=(q,), daemon=True)
+    t.start()
+
+    while True:
+        item = q.get()
+        if item is _DONE:
+            # item tiếp theo là final snapshot
+            yield q.get()
+            break
+        yield item
