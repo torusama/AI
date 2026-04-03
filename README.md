@@ -2,6 +2,7 @@
   <img src="https://drive.google.com/uc?export=view&id=1vFAeat4fajF13IuzR7D9f5_Uz44pPOqN" alt="Image 1" width="45%" />
   <img src="https://drive.google.com/uc?export=view&id=156u4RIHC5YRH_e7GmwraRA_SwgJTtW29" alt="Image 2" width="45%" />
 </p>
+
 # Shipper AI Pathfinding in a Weighted Grid World
 
 ## Introduction to Artificial Intelligence - Lab 1
