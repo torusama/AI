@@ -5,6 +5,7 @@ Iterative Deepening A* (IDA*)
 - Kết hợp ưu điểm DFS (ít bộ nhớ) với heuristic của A*.
 """
 
+import math
 import time
 from core.grid import Grid
 from core.heuristic import heuristic_to_goal
@@ -15,6 +16,18 @@ def _compute_path_cost(grid: Grid, path):
         return 0
     # Path cost is the sum of costs of entered cells (excluding start).
     return sum(grid.get_cost(r, c) for r, c in path[1:])
+
+
+def _normalize_bound(value):
+    """
+    IDA* trên project này luôn có chi phí đường đi nguyên (1 hoặc 3 mỗi bước).
+    Với Euclidean, f-cost là số thực nên threshold tăng qua rất nhiều mốc lẻ
+    không cần thiết và làm số vòng lặp bùng lên. Làm tròn ngưỡng lên số nguyên
+    tiếp theo vẫn giữ admissible nhưng tránh các vòng deepening dư thừa đó.
+    """
+    if value == float("inf"):
+        return value
+    return int(math.ceil(value - 1e-9))
 
 def _ida_star_run(grid: Grid, capture_steps: bool, heuristic_name: str = 'manhattan'):
     start = grid.start
@@ -33,7 +46,7 @@ def _ida_star_run(grid: Grid, capture_steps: bool, heuristic_name: str = 'manhat
     start_state = (start, start_goods)
 
     # Ngưỡng bắt đầu bằng heuristic từ điểm xuất phát
-    threshold = heuristic_to_goal(start, goal, heuristic_name)
+    threshold = _normalize_bound(heuristic_to_goal(start, goal, heuristic_name))
     
     explored_overall = set()
     snapshots = []
@@ -144,7 +157,7 @@ def _ida_star_run(grid: Grid, capture_steps: bool, heuristic_name: str = 'manhat
             break
 
         # Tăng ngưỡng lên giá trị f_cost nhỏ nhất đã từng vượt ngưỡng cũ
-        threshold = result
+        threshold = _normalize_bound(result)
 
     time_ms = (time.time() - t0) * 1000
     final_cost = _compute_path_cost(grid, final_path) if found else 0
@@ -204,7 +217,7 @@ def ida_star_steps(grid: Grid, heuristic_name: str = 'manhattan'):
         start_goods = frozenset({start}) if start in all_goods else frozenset()
         start_state = (start, start_goods)
 
-        threshold = heuristic_to_goal(start, goal, heuristic_name)
+        threshold = _normalize_bound(heuristic_to_goal(start, goal, heuristic_name))
         explored_overall = set()
         transposition_table = {}
         final_path = []
@@ -291,7 +304,7 @@ def ida_star_steps(grid: Grid, heuristic_name: str = 'manhattan'):
             if result == float("inf"):
                 break
 
-            threshold = result
+            threshold = _normalize_bound(result)
 
         time_ms = (time.time() - t0) * 1000
         final_cost = _compute_path_cost(grid, final_path) if found else 0
