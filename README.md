@@ -288,3 +288,7 @@ The project currently includes these maps:
 ## Summary
 
 This project is a visual search-algorithm simulator centered around a shipper moving in a weighted grid world. It is useful for demonstrating how different search strategies behave, how heuristics affect performance, and how pathfinding changes across different map layouts and movement costs.
+
+## Demo
+
+[\[Video\]](https://youtu.be/13VusBECbas)
